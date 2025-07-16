@@ -300,11 +300,43 @@ ENABLE_TEMPORAL_PATTERN_CHECK = True            # Check speech timing patterns
 ENABLE_ENERGY_DISTRIBUTION_CHECK = True         # Check energy distribution
 
 # ✅ USER SPEECH DETECTION (when Buddy silent)
-USER_SPEECH_THRESHOLD = 800                     # Base volume threshold
+USER_SPEECH_THRESHOLD = 800                     # Base volume threshold (close range)
 USER_SPEECH_QUALITY_THRESHOLD = 0.25             # How "voice-like" it needs to be (0-1)
 USER_SPEECH_SPECTRAL_THRESHOLD = 0.35            # Voice frequency content (0-1)
 USER_MIN_SPEECH_FRAMES = 5                      # Need sustained speech
 USER_MAX_SILENCE_FRAMES = 80                    # Allow pauses
+
+# ✅ ROOM-SCALE DETECTION SYSTEM
+ROOM_SCALE_MODE = True                           # Enable room-scale voice detection
+DISTANT_SPEECH_ENABLED = True                   # Enable distant speech detection
+AUTO_DISTANCE_DETECTION = True                  # Automatically detect speaker distance
+BACKGROUND_REJECTION_ENABLED = True             # Smart background audio rejection
+ROOM_ACOUSTIC_COMPENSATION = True               # Compensate for room acoustics
+
+# ✅ DISTANCE-ADAPTIVE THRESHOLDS
+DETECTION_TIERS = {
+    "close": {"volume": 800, "quality": 0.6, "range": "0-50cm", "spectral": 0.4},
+    "medium": {"volume": 400, "quality": 0.35, "range": "50cm-1.5m", "spectral": 0.3},  
+    "far": {"volume": 200, "quality": 0.20, "range": "1.5m-3m", "spectral": 0.25},
+    "room": {"volume": 100, "quality": 0.15, "range": "3m+", "spectral": 0.2}
+}
+
+CLOSE_RANGE_THRESHOLD = 800                     # 0-50cm
+MEDIUM_RANGE_THRESHOLD = 400                    # 50cm-1.5m
+FAR_RANGE_THRESHOLD = 200                       # 1.5m-3m
+ROOM_RANGE_THRESHOLD = 100                      # 3m+
+
+# ✅ SMART FILTERING SETTINGS
+VOICE_FINGERPRINT_MATCHING = True              # Focus on primary user's voice
+MULTI_SPEAKER_REJECTION = True                 # Reject other speakers
+MEDIA_AUDIO_FILTERING = True                   # Filter TV/music patterns
+ENVIRONMENTAL_NOISE_LEARNING = True            # Learn room noise patterns
+
+# ✅ ENHANCED AUDIO PROCESSING
+AUTO_GAIN_CONTROL = True                       # Boost quiet distant speech
+SPECTRAL_FILTERING = True                      # Isolate human voice frequencies
+REVERBERATION_COMPENSATION = True              # Handle room echo
+DIRECTIONAL_PROCESSING = True                  # Focus on speech from user locations
 
 # ✅ NOISE FILTERING THRESHOLDS
 NOISE_TO_SIGNAL_RATIO = 0.3                     # Background noise vs speech ratio
