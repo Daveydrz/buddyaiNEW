@@ -97,6 +97,72 @@ class FullDuplexManager:
         print(f"[FullDuplex]   - User Spectral Threshold: {self.user_speech_spectral_threshold}")
         print(f"[FullDuplex]   - Interrupt Quality Threshold: {self.buddy_interrupt_quality_threshold}")
 
+        # ✅ NEW: Room-scale detection features
+        self.room_scale_mode = getattr(globals().get('config', {}), 'ROOM_SCALE_MODE', True)
+        self.distance_adaptive_detection = getattr(globals().get('config', {}), 'AUTO_DISTANCE_DETECTION', True)
+        self.background_rejection = getattr(globals().get('config', {}), 'BACKGROUND_REJECTION_ENABLED', True)
+        
+        # ✅ NEW: Load distance detection tiers
+        try:
+            from config import DETECTION_TIERS
+            self.detection_tiers = DETECTION_TIERS
+        except:
+            self.detection_tiers = {
+                "close": {"volume": 800, "quality": 0.6, "range": "0-50cm", "spectral": 0.4},
+                "medium": {"volume": 400, "quality": 0.35, "range": "50cm-1.5m", "spectral": 0.3},
+                "far": {"volume": 200, "quality": 0.20, "range": "1.5m-3m", "spectral": 0.25},
+                "room": {"volume": 100, "quality": 0.15, "range": "3m+", "spectral": 0.2}
+            }
+        
+        # ✅ NEW: Initialize advanced voice analyzer for room-scale detection
+        try:
+            from audio.voice_analyzer import voice_analyzer
+            self.voice_analyzer = voice_analyzer
+            print(f"[FullDuplex] 🧠 Room-Scale Voice Analyzer loaded")
+        except:
+            self.voice_analyzer = None
+            print(f"[FullDuplex] ⚠️ Room-Scale Voice Analyzer not available")
+        
+        # ✅ NEW: Distance-adaptive thresholds
+        self.current_distance_tier = "medium"  # Default to medium range
+        self.adaptive_volume_threshold = self.user_speech_threshold
+        self.adaptive_quality_threshold = self.user_speech_quality_threshold
+        self.adaptive_spectral_threshold = self.user_speech_spectral_threshold
+        
+        # ✅ NEW: Load calibration if available
+        self.calibration_data = None
+        try:
+            import os
+            import json
+            if os.path.exists("room_calibration_latest.json"):
+                with open("room_calibration_latest.json", 'r') as f:
+                    self.calibration_data = json.load(f)
+                print(f"[FullDuplex] 📊 Room calibration data loaded")
+                
+                # Use calibrated thresholds if available
+                if 'optimal_thresholds' in self.calibration_data:
+                    optimal = self.calibration_data['optimal_thresholds']
+                    print(f"[FullDuplex] 🎯 Using calibrated thresholds:")
+                    for tier_name, thresholds in optimal.items():
+                        if tier_name in self.detection_tiers:
+                            self.detection_tiers[tier_name].update({
+                                'volume': thresholds.get('volume_threshold', self.detection_tiers[tier_name]['volume']),
+                                'quality': thresholds.get('quality_threshold', self.detection_tiers[tier_name]['quality']),
+                                'spectral': thresholds.get('spectral_threshold', self.detection_tiers[tier_name].get('spectral', 0.2))
+                            })
+                        print(f"[FullDuplex]   {tier_name}: vol={self.detection_tiers[tier_name]['volume']:.0f}")
+            else:
+                print(f"[FullDuplex] 💡 No calibration found - using default thresholds")
+        except Exception as e:
+            print(f"[FullDuplex] ⚠️ Calibration load error: {e}")
+        
+        print(f"[FullDuplex] 🏠 Room-Scale Detection:")
+        print(f"[FullDuplex]   - Room Scale Mode: {self.room_scale_mode}")
+        print(f"[FullDuplex]   - Distance Adaptive: {self.distance_adaptive_detection}")
+        print(f"[FullDuplex]   - Background Rejection: {self.background_rejection}")
+        print(f"[FullDuplex]   - Detection Tiers: {len(self.detection_tiers)}")
+        print(f"[FullDuplex]   - Calibration Loaded: {self.calibration_data is not None}")
+
     # ✅ NEW: Interrupt flag management
     def reset_interrupt_flag(self):
         """Reset the interrupt flag"""
@@ -305,29 +371,90 @@ class FullDuplexManager:
                     user_detection_active = self.user_speech_detection_active
                     interrupt_active = self.interrupt_detection_active
 
-                # ✅ VOICE ANALYSIS
+                # ✅ ROOM-SCALE VOICE ANALYSIS with Distance-Adaptive Detection
                 try:
-                    from audio.voice_analyzer import voice_analyzer
-                    if voice_analyzer:
-                        is_voice, voice_score, details = voice_analyzer.analyze_audio_chunk(
+                    if self.voice_analyzer and self.room_scale_mode:
+                        # Use enhanced room-scale detection
+                        is_voice, voice_score, details, detected_distance = self.voice_analyzer.analyze_with_distance_adaptation(
                             chunk, is_buddy_speaking=(state == "BUDDY_RESPONDING")
                         )
+                        
+                        # Update current distance tier for adaptive thresholds
+                        if detected_distance in self.detection_tiers:
+                            self.current_distance_tier = detected_distance
+                            tier_config = self.detection_tiers[detected_distance]
+                            
+                            # Update adaptive thresholds based on detected distance
+                            self.adaptive_volume_threshold = tier_config['volume']
+                            self.adaptive_quality_threshold = tier_config['quality']
+                            self.adaptive_spectral_threshold = tier_config.get('spectral', 0.2)
+                        
+                        # Learn environmental noise during quiet periods
+                        if not is_voice and voice_score < 0.1:
+                            self.voice_analyzer.learn_environmental_noise(chunk)
+                        
+                        # Add distance information to details
+                        details.update({
+                            'detected_distance': detected_distance,
+                            'adaptive_thresholds_used': True,
+                            'current_tier': self.current_distance_tier
+                        })
+                        
+                    elif self.voice_analyzer:
+                        # Use standard advanced analysis
+                        is_voice, voice_score, details = self.voice_analyzer.analyze_audio_chunk(
+                            chunk, is_buddy_speaking=(state == "BUDDY_RESPONDING")
+                        )
+                        details.update({
+                            'detected_distance': 'unknown',
+                            'adaptive_thresholds_used': False,
+                            'current_tier': 'standard'
+                        })
                     else:
                         # Fallback to simple volume detection
                         volume = np.abs(chunk).mean()
                         peak = np.max(np.abs(chunk))
-                        is_voice = volume > self.user_speech_threshold
-                        voice_score = min(1.0, volume / self.user_speech_threshold)
-                        details = {'volume': volume, 'peak': peak, 'combined': voice_score}
+                        
+                        # Apply distance-adaptive thresholds even in fallback mode
+                        if self.room_scale_mode:
+                            # Estimate distance from volume
+                            if volume >= 800:
+                                threshold = self.detection_tiers['close']['volume']
+                            elif volume >= 400:
+                                threshold = self.detection_tiers['medium']['volume']
+                            elif volume >= 200:
+                                threshold = self.detection_tiers['far']['volume']
+                            else:
+                                threshold = self.detection_tiers['room']['volume']
+                        else:
+                            threshold = self.user_speech_threshold
+                        
+                        is_voice = volume > threshold
+                        voice_score = min(1.0, volume / threshold) if threshold > 0 else 0.0
+                        details = {
+                            'volume': volume, 
+                            'peak': peak, 
+                            'combined': voice_score,
+                            'threshold_used': threshold,
+                            'detected_distance': 'fallback_estimate',
+                            'adaptive_thresholds_used': self.room_scale_mode
+                        }
+                        
                 except Exception as e:
                     if DEBUG:
-                        print(f"[FullDuplex] Voice analysis error: {e}")
-                    # Fallback to simple detection
+                        print(f"[FullDuplex] Room-scale voice analysis error: {e}")
+                    # Emergency fallback to simple detection
                     volume = np.abs(chunk).mean()
                     peak = np.max(np.abs(chunk))
                     is_voice = volume > self.user_speech_threshold
                     voice_score = min(1.0, volume / self.user_speech_threshold)
-                    details = {'volume': volume, 'peak': peak, 'combined': voice_score}
+                    details = {
+                        'volume': volume, 
+                        'peak': peak, 
+                        'combined': voice_score,
+                        'error': str(e),
+                        'fallback_mode': True
+                    }
 
                 # Extract volume for legacy compatibility
                 volume = details.get('volume', np.abs(chunk).mean())
@@ -703,6 +830,170 @@ class FullDuplexManager:
             "noise_calibrated": self.noise_calibrated,
             "noise_baseline": self.noise_baseline,
         }
+
+    # ✅ NEW: Room-Scale Detection Methods
+    
+    def get_room_scale_stats(self):
+        """Get room-scale detection statistics"""
+        stats = self.get_stats()
+        
+        # Add room-scale specific stats
+        stats.update({
+            'room_scale_mode': self.room_scale_mode,
+            'distance_adaptive_detection': self.distance_adaptive_detection,
+            'background_rejection': self.background_rejection,
+            'current_distance_tier': self.current_distance_tier,
+            'adaptive_volume_threshold': self.adaptive_volume_threshold,
+            'adaptive_quality_threshold': self.adaptive_quality_threshold,
+            'adaptive_spectral_threshold': self.adaptive_spectral_threshold,
+            'detection_tiers': self.detection_tiers,
+            'calibration_loaded': self.calibration_data is not None
+        })
+        
+        # Add voice analyzer stats if available
+        if self.voice_analyzer and hasattr(self.voice_analyzer, 'get_room_scale_stats'):
+            analyzer_stats = self.voice_analyzer.get_room_scale_stats()
+            stats.update({'voice_analyzer': analyzer_stats})
+        
+        return stats
+
+    def trigger_room_calibration(self):
+        """Trigger room calibration process"""
+        try:
+            print("[FullDuplex] 🎯 Starting room calibration...")
+            
+            # Import and run calibration
+            from audio.room_calibration import RoomCalibrationSystem
+            
+            calibration_system = RoomCalibrationSystem()
+            success = calibration_system.start_calibration()
+            
+            if success:
+                # Reload calibration data
+                import json
+                try:
+                    with open("room_calibration_latest.json", 'r') as f:
+                        self.calibration_data = json.load(f)
+                    
+                    # Update detection tiers with calibrated values
+                    if 'optimal_thresholds' in self.calibration_data:
+                        optimal = self.calibration_data['optimal_thresholds']
+                        for tier_name, thresholds in optimal.items():
+                            if tier_name in self.detection_tiers:
+                                self.detection_tiers[tier_name].update({
+                                    'volume': thresholds.get('volume_threshold', self.detection_tiers[tier_name]['volume']),
+                                    'quality': thresholds.get('quality_threshold', self.detection_tiers[tier_name]['quality']),
+                                    'spectral': thresholds.get('spectral_threshold', self.detection_tiers[tier_name].get('spectral', 0.2))
+                                })
+                    
+                    print("[FullDuplex] ✅ Room calibration complete and applied")
+                    return True
+                    
+                except Exception as load_error:
+                    print(f"[FullDuplex] ❌ Error loading new calibration: {load_error}")
+                    return False
+            else:
+                print("[FullDuplex] ❌ Room calibration failed")
+                return False
+                
+        except Exception as e:
+            print(f"[FullDuplex] ❌ Room calibration error: {e}")
+            return False
+
+    def set_distance_tier(self, tier_name):
+        """Manually set the distance tier for testing"""
+        if tier_name in self.detection_tiers:
+            self.current_distance_tier = tier_name
+            tier_config = self.detection_tiers[tier_name]
+            
+            self.adaptive_volume_threshold = tier_config['volume']
+            self.adaptive_quality_threshold = tier_config['quality']
+            self.adaptive_spectral_threshold = tier_config.get('spectral', 0.2)
+            
+            print(f"[FullDuplex] 🎯 Distance tier set to {tier_name}: vol={self.adaptive_volume_threshold}")
+            return True
+        else:
+            print(f"[FullDuplex] ❌ Unknown distance tier: {tier_name}")
+            return False
+
+    def test_distance_detection(self, audio_sample):
+        """Test distance detection on a specific audio sample"""
+        try:
+            if self.voice_analyzer and hasattr(self.voice_analyzer, 'analyze_with_distance_adaptation'):
+                is_voice, quality_score, details, detected_distance = self.voice_analyzer.analyze_with_distance_adaptation(audio_sample)
+                
+                return {
+                    'is_voice': is_voice,
+                    'quality_score': quality_score,
+                    'detected_distance': detected_distance,
+                    'details': details
+                }
+            else:
+                # Fallback simple test
+                volume = np.abs(audio_sample).mean()
+                
+                # Estimate distance from volume
+                if volume >= 800:
+                    distance = "close"
+                elif volume >= 400:
+                    distance = "medium"
+                elif volume >= 200:
+                    distance = "far"
+                else:
+                    distance = "room"
+                
+                return {
+                    'is_voice': volume > self.detection_tiers[distance]['volume'],
+                    'quality_score': min(1.0, volume / self.detection_tiers[distance]['volume']),
+                    'detected_distance': distance,
+                    'details': {'volume': volume, 'simple_test': True}
+                }
+                
+        except Exception as e:
+            print(f"[FullDuplex] ❌ Distance detection test error: {e}")
+            return None
+
+    def enable_background_rejection(self, enabled=True):
+        """Enable or disable background rejection"""
+        self.background_rejection = enabled
+        if self.voice_analyzer:
+            self.voice_analyzer.background_rejection_enabled = enabled
+        print(f"[FullDuplex] 🛡️ Background rejection: {'enabled' if enabled else 'disabled'}")
+
+    def set_primary_user_voice(self, audio_samples):
+        """Set the primary user's voice profile for better rejection of other speakers"""
+        try:
+            if self.voice_analyzer and hasattr(self.voice_analyzer, 'set_primary_user_voice_profile'):
+                success = self.voice_analyzer.set_primary_user_voice_profile(audio_samples)
+                if success:
+                    print("[FullDuplex] ✅ Primary user voice profile set")
+                    return True
+                else:
+                    print("[FullDuplex] ❌ Failed to set primary user voice profile")
+                    return False
+            else:
+                print("[FullDuplex] ⚠️ Voice fingerprinting not available")
+                return False
+        except Exception as e:
+            print(f"[FullDuplex] ❌ Error setting primary user voice: {e}")
+            return False
+
+    def force_reset_to_waiting(self):
+        """Force reset to waiting state for recovery"""
+        with self.conversation_state_lock:
+            self.conversation_state = "WAITING_FOR_INPUT"
+            self.user_speech_detection_active = True
+            self.vad_active = False
+            self.interrupt_detection_active = False
+            self.user_is_speaking = False
+            self.buddy_is_speaking = False
+        
+        # Reset counters
+        self.speech_frames = 0
+        self.silence_frames = 0
+        self.interrupt_frames = 0
+        
+        print("[FullDuplex] 🔄 Forced reset to waiting state")
 
 # Create global instance
 try:
