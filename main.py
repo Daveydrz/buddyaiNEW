@@ -421,80 +421,321 @@ def get_mic_feeding_state():
     with state_lock:
         return mic_feeding_active
 
+def is_simple_conversation(text):
+    """🚀 PERFORMANCE: Detect simple conversations that can bypass heavy processing"""
+    text_lower = text.lower().strip()
+    
+    # Simple greetings and casual conversation patterns
+    simple_patterns = [
+        # Greetings
+        r'^hi\b', r'^hello\b', r'^hey\b', r'^good morning\b', r'^good afternoon\b', r'^good evening\b',
+        # Casual questions
+        r'^how are you', r'^how\'s it going', r'^what\'s up', r'^how you doing',
+        # Simple acknowledgments
+        r'^yes\b', r'^no\b', r'^okay\b', r'^ok\b', r'^thanks\b', r'^thank you\b',
+        # Simple responses
+        r'^good\b', r'^fine\b', r'^great\b', r'^alright\b',
+    ]
+    
+    for pattern in simple_patterns:
+        if re.match(pattern, text_lower):
+            print(f"[FastPath] ✅ Simple conversation detected: '{text}' - bypassing heavy processing")
+            return True
+    
+    # Check for questions that definitely need name extraction (introductions)
+    introduction_patterns = [
+        r'my name is', r'call me', r'i\'m [a-zA-Z]+$', r'this is [a-zA-Z]+$'
+    ]
+    
+    for pattern in introduction_patterns:
+        if re.search(pattern, text_lower):
+            print(f"[FastPath] 🆔 Introduction detected: '{text}' - requires full processing")
+            return False
+    
+    print(f"[FastPath] ➡️ Regular conversation: '{text}' - using standard processing")
+    return False
+
+# Global cache for identity results to prevent duplicate analysis
+_identity_cache = {}
+_identity_cache_timestamp = {}
+
+def get_cached_identity(audio_hash, current_user, max_age_seconds=30):
+    """🚀 PERFORMANCE: Get cached identity result to prevent duplicate analysis"""
+    import time
+    import hashlib
+    
+    if audio_hash is None:
+        return None
+        
+    # Check if we have a recent result for this audio
+    if audio_hash in _identity_cache:
+        age = time.time() - _identity_cache_timestamp.get(audio_hash, 0)
+        if age < max_age_seconds:
+            cached_result = _identity_cache[audio_hash]
+            print(f"[Cache] ✅ Using cached identity: {cached_result} (age: {age:.1f}s)")
+            return cached_result
+        else:
+            # Remove expired cache entry
+            del _identity_cache[audio_hash]
+            del _identity_cache_timestamp[audio_hash]
+    
+    return None
+
+def cache_identity_result(audio_hash, identity_result):
+    """🚀 PERFORMANCE: Cache identity result for reuse"""
+    import time
+    
+    if audio_hash is not None and identity_result is not None:
+        _identity_cache[audio_hash] = identity_result
+        _identity_cache_timestamp[audio_hash] = time.time()
+        print(f"[Cache] 💾 Cached identity result: {identity_result}")
+
 def handle_streaming_response(text, current_user):
-    """✅ ENHANCED: Smart streaming with ADVANCED AI ASSISTANT features + VOICE-BASED IDENTITY"""
+    """✅ ENHANCED: Smart streaming with ADVANCED AI ASSISTANT features + VOICE-BASED IDENTITY + PERFORMANCE OPTIMIZATIONS"""
     print(f"🚨🚨🚨 [CRITICAL_DEBUG] handle_streaming_response called with text='{text}', user='{current_user}' 🚨🚨🚨")
     try:
         print(f"[AdvancedResponse] 🎭 Starting ADVANCED AI streaming for: '{text}'")
         
-        # ✅ NEW: Get voice-based identity FIRST (overrides system login)
-        voice_identified_user = None
-        try:
-            # STEP 1: Check if current_user is a cluster ID
-            if current_user and current_user.startswith('Anonymous_'):
-                print(f"[VoiceIdentity] 🔍 Cluster ID detected: {current_user}")
+        # 🚀 PERFORMANCE: Fast-path for simple conversations
+        if is_simple_conversation(text):
+            print(f"[FastPath] ⚡ Using fast-path for simple conversation")
+            
+            # Quick responses for direct questions (immediate)
+            if is_direct_time_question(text):
+                brisbane_time = get_current_brisbane_time()
+                if IS_SUNSHINE_COAST:
+                    speak_streaming(f"It's {brisbane_time['time_12h']} here in Birtinya, Sunshine Coast.")
+                else:
+                    speak_streaming(f"It's {brisbane_time['time_12h']} here in {USER_PRECISE_LOCATION}.")
+                return
+            
+            if is_direct_location_question(text):
+                if IS_SUNSHINE_COAST:
+                    speak_streaming(f"I'm located in Birtinya, Sunshine Coast, Queensland {USER_POSTCODE_PRECISE}.")
+                else:
+                    speak_streaming(f"I'm located in {USER_PRECISE_LOCATION} {USER_POSTCODE_PRECISE}.")
+                return
+            
+            if is_direct_date_question(text):
+                brisbane_time = get_current_brisbane_time()
+                speak_streaming(f"Today is {brisbane_time['date']}.")
+                return
+            
+            # For simple conversations, bypass voice processing and go directly to LLM
+            print(f"[FastPath] ⚡ Bypassing identity analysis for simple conversation")
+            
+            # Use basic user (no expensive voice processing)
+            simple_user = current_user
+            
+            # Generate response directly without identity processing
+            full_response = ""
+            chunk_count = 0
+            first_chunk = True
+            response_interrupted = False
+            
+            try:
+                from ai.chat_enhanced_smart_with_fusion import generate_response_streaming_with_intelligent_fusion
+                print("[FastPath] ✅ Using FAST PATH AI streaming")
                 
-                # STEP 2: Try to get the display name from ai.speech
-                try:
-                    from ai.speech import get_display_name
-                    display_name = get_display_name(current_user)
+                # Process LLM chunks with IMMEDIATE interrupt breaking
+                for chunk in generate_response_streaming_with_intelligent_fusion(text, simple_user, DEFAULT_LANG):
+                    # Check for interrupt BEFORE processing chunk
+                    if full_duplex_manager and full_duplex_manager.speech_interrupted:
+                        print("[FastPath] ⚡ INTERRUPT DETECTED - IMMEDIATELY STOPPING LLM")
+                        response_interrupted = True
+                        break
                     
-                    # STEP 3: If display name is different and looks like a real name, use it
-                    if (display_name and 
-                        display_name != current_user and 
-                        display_name not in ['friend', 'Anonymous_Speaker', 'Unknown', 'Guest']):
+                    if chunk and chunk.strip():
+                        chunk_count += 1
+                        chunk_text = chunk.strip()
                         
-                        current_user = display_name
-                        print(f"[VoiceIdentity] 🎯 DISPLAY NAME OVERRIDE: Using {current_user}")
+                        if first_chunk:
+                            print("[FastPath] 🎭 First chunk ready - starting natural speech!")
+                            first_chunk = False
                         
-                except Exception as display_error:
-                    print(f"[VoiceIdentity] ⚠️ Display name error: {display_error}")
+                        print(f"[FastPath] 🗣️ Speaking chunk {chunk_count}: '{chunk_text[:50]}...'")
+                        
+                        # Validate chunk before speaking
+                        try:
+                            is_appropriate, validated_chunk = validate_ai_response_appropriateness(simple_user, chunk_text)
+                            
+                            if not is_appropriate:
+                                print(f"[FastPath] 🛡️ Chunk {chunk_count} corrected for context appropriateness")
+                                chunk_text = validated_chunk
+                        except Exception as validation_error:
+                            print(f"[FastPath] ⚠️ Validation error for chunk {chunk_count}: {validation_error}")
+                        
+                        # Speak chunk
+                        speak_streaming(chunk_text)
+                        full_response += chunk_text + " "
+                        
+                        # Check AGAIN after queueing
+                        if full_duplex_manager and full_duplex_manager.speech_interrupted:
+                            print("[FastPath] ⚡ INTERRUPT AFTER QUEUEING - STOPPING NOW")
+                            response_interrupted = True
+                            break
+                        
+                        # Brief pause for natural flow
+                        if not (full_duplex_manager and full_duplex_manager.speech_interrupted):
+                            time.sleep(0.05)
             
-            # STEP 4: Also try voice-based identity from audio
-            if hasattr(voice_manager, 'get_last_audio_sample') and voice_manager.get_last_audio_sample():
-                last_audio = voice_manager.get_last_audio_sample()
-                voice_identified_user = get_voice_based_identity(last_audio)
-                if voice_identified_user and voice_identified_user not in ["Anonymous_Speaker", "Unknown", "Guest"]:
-                    # Only override if it's a real name, not another cluster
-                    if not voice_identified_user.startswith('Anonymous_'):
-                        current_user = voice_identified_user
-                        print(f"[VoiceIdentity] 🎤 AUDIO VOICE OVERRIDE: Using {current_user}")
-            
-            # STEP 5: Advanced voice processing if available
-            if ADVANCED_AI_AVAILABLE and hasattr(voice_manager, 'get_current_speaker_identity'):
-                advanced_user = voice_manager.get_current_speaker_identity()
-                if advanced_user and advanced_user not in ["Unknown", "Anonymous_Speaker"]:
-                    # Only use if it's a real name
-                    if not advanced_user.startswith('Anonymous_'):
-                        current_user = advanced_user
-                        print(f"[AdvancedAI] 🎯 Advanced voice ID: {current_user}")
+            except ImportError:
+                print("[FastPath] ⚠️ Advanced streaming not available, using enhanced fallback")
+                response = generate_response(text, simple_user, DEFAULT_LANG)
                 
-        except Exception as voice_error:
-            print(f"[VoiceIdentity] ⚠️ Voice ID error: {voice_error}")
+                # Validate complete response before speaking
+                try:
+                    is_appropriate, validated_response = validate_ai_response_appropriateness(simple_user, response)
+                    
+                    if not is_appropriate:
+                        print(f"[FastPath] 🛡️ Fallback response corrected for context appropriateness")
+                        response = validated_response
+                except Exception as validation_error:
+                    print(f"[FastPath] ⚠️ Validation error for fallback response: {validation_error}")
+                
+                # Split into sentences for interrupt checking
+                sentences = re.split(r'(?<=[.!?])\s+', response)
+                for sentence in sentences:
+                    if sentence.strip():
+                        # Check for interrupt before each sentence
+                        if full_duplex_manager and full_duplex_manager.speech_interrupted:
+                            print("[FastPath] ⚡ INTERRUPT IN FALLBACK - STOPPING")
+                            response_interrupted = True
+                            break
+                        
+                        speak_streaming(sentence.strip())
+                        
+                        # Check again after queueing
+                        if full_duplex_manager and full_duplex_manager.speech_interrupted:
+                            print("[FastPath] ⚡ INTERRUPT AFTER FALLBACK SENTENCE - STOPPING")
+                            response_interrupted = True
+                            break
+                        
+                        time.sleep(0.1)
+                
+                full_response = response
+            
+            # Handle completion
+            if not response_interrupted:
+                if full_response.strip():
+                    add_to_conversation_history(simple_user, text, full_response.strip())
+                    print(f"[FastPath] ✅ FAST PATH streaming complete for user {simple_user} - {chunk_count} segments")
+                else:
+                    print("[FastPath] ❌ No response generated")
+                    speak_streaming("I'm sorry, I didn't generate a proper response.")
+            else:
+                print("[FastPath] ⚡ Response was INTERRUPTED - skipping completion")
+                
+                # Emergency cleanup after interrupt
+                try:
+                    clear_audio_queue()
+                    stop_audio_playback()
+                    print("[FastPath] 🧹 Emergency audio cleanup completed")
+                except Exception as cleanup_err:
+                    print(f"[FastPath] ⚠️ Cleanup error: {cleanup_err}")
+            
+            return  # Exit early for simple conversations
+        
+        # ✅ FULL PROCESSING: For complex conversations that need identity analysis
+        print(f"[AdvancedResponse] 🔍 Complex conversation detected - using full processing pipeline")
+        
+        # Generate audio hash for caching (if audio is available)
+        audio_hash = None
+        try:
+            if hasattr(voice_manager, 'get_last_audio_sample') and voice_manager.get_last_audio_sample():
+                import hashlib
+                last_audio = voice_manager.get_last_audio_sample()
+                if last_audio is not None:
+                    audio_hash = hashlib.md5(last_audio.tobytes() if hasattr(last_audio, 'tobytes') else str(last_audio).encode()).hexdigest()
+        except Exception as hash_error:
+            print(f"[Cache] ⚠️ Audio hashing error: {hash_error}")
+        
+        # Check cache first to prevent duplicate analysis
+        cached_identity = get_cached_identity(audio_hash, current_user)
+        if cached_identity:
+            current_user = cached_identity
+            print(f"[Cache] ⚡ Using cached identity, skipping voice analysis")
+        else:
+            # ✅ NEW: Get voice-based identity FIRST (overrides system login) - only for complex conversations
+            voice_identified_user = None
+            try:
+                # STEP 1: Check if current_user is a cluster ID
+                if current_user and current_user.startswith('Anonymous_'):
+                    print(f"[VoiceIdentity] 🔍 Cluster ID detected: {current_user}")
+                    
+                    # STEP 2: Try to get the display name from ai.speech
+                    try:
+                        from ai.speech import get_display_name
+                        display_name = get_display_name(current_user)
+                        
+                        # STEP 3: If display name is different and looks like a real name, use it
+                        if (display_name and 
+                            display_name != current_user and 
+                            display_name not in ['friend', 'Anonymous_Speaker', 'Unknown', 'Guest']):
+                            
+                            current_user = display_name
+                            print(f"[VoiceIdentity] 🎯 DISPLAY NAME OVERRIDE: Using {current_user}")
+                            
+                    except Exception as display_error:
+                        print(f"[VoiceIdentity] ⚠️ Display name error: {display_error}")
+                
+                # STEP 4: Also try voice-based identity from audio
+                if hasattr(voice_manager, 'get_last_audio_sample') and voice_manager.get_last_audio_sample():
+                    last_audio = voice_manager.get_last_audio_sample()
+                    voice_identified_user = get_voice_based_identity(last_audio)
+                    if voice_identified_user and voice_identified_user not in ["Anonymous_Speaker", "Unknown", "Guest"]:
+                        # Only override if it's a real name, not another cluster
+                        if not voice_identified_user.startswith('Anonymous_'):
+                            current_user = voice_identified_user
+                            print(f"[VoiceIdentity] 🎤 AUDIO VOICE OVERRIDE: Using {current_user}")
+                
+                # STEP 5: Advanced voice processing if available
+                if ADVANCED_AI_AVAILABLE and hasattr(voice_manager, 'get_current_speaker_identity'):
+                    advanced_user = voice_manager.get_current_speaker_identity()
+                    if advanced_user and advanced_user not in ["Unknown", "Anonymous_Speaker"]:
+                        # Only use if it's a real name
+                        if not advanced_user.startswith('Anonymous_'):
+                            current_user = advanced_user
+                            print(f"[AdvancedAI] 🎯 Advanced voice ID: {current_user}")
+                    
+            except Exception as voice_error:
+                print(f"[VoiceIdentity] ⚠️ Voice ID error: {voice_error}")
+            
+            # Cache the identity result
+            cache_identity_result(audio_hash, current_user)
 
         print(f"[VoiceIdentity] ✅ FINAL USER for LLM: {current_user}")
         
-        # ✅ Process user identification and name management
-        try:
-            from ai.speech import identify_user, get_display_name
-            
-            # Check if user is introducing themselves
-            identify_user(text, current_user)
-            
-            # Get display name for responses (voice-based, not system)
-            display_name = get_voice_based_display_name(current_user)
-            
-            # Handle name questions using VOICE MATCHING (not system login)
-            if any(phrase in text.lower() for phrase in ["what's my name", "my name", "who am i", "what is my name"]):
-                voice_response = get_voice_based_name_response(current_user, display_name)
-                speak_streaming(voice_response)
-                return
+        # ✅ PERFORMANCE: Conditional name extraction - only check if it looks like an introduction
+        should_check_names = any(keyword in text.lower() for keyword in [
+            "my name is", "call me", "i'm", "this is", "my name", "who am i", "what's my name"
+        ])
+        
+        if should_check_names:
+            print(f"[AdvancedResponse] 🆔 Introduction/name keywords detected - running name analysis")
+            try:
+                from ai.speech import identify_user, get_display_name
                 
-        except ImportError:
-            print(f"[AdvancedResponse] ⚠️ Speech identification not available")
-            display_name = get_voice_based_display_name(current_user)
-        except Exception as id_error:
-            print(f"[AdvancedResponse] ⚠️ Identification error: {id_error}")
+                # Check if user is introducing themselves
+                identify_user(text, current_user)
+                
+                # Get display name for responses (voice-based, not system)
+                display_name = get_voice_based_display_name(current_user)
+                
+                # Handle name questions using VOICE MATCHING (not system login)
+                if any(phrase in text.lower() for phrase in ["what's my name", "my name", "who am i", "what is my name"]):
+                    voice_response = get_voice_based_name_response(current_user, display_name)
+                    speak_streaming(voice_response)
+                    return
+                    
+            except ImportError:
+                print(f"[AdvancedResponse] ⚠️ Speech identification not available")
+                display_name = get_voice_based_display_name(current_user)
+            except Exception as id_error:
+                print(f"[AdvancedResponse] ⚠️ Identification error: {id_error}")
+                display_name = get_voice_based_display_name(current_user)
+        else:
+            print(f"[AdvancedResponse] ⚡ PERFORMANCE: Skipping name extraction for non-introduction text")
             display_name = get_voice_based_display_name(current_user)
         
         # ✅ ADVANCED: Check if LLM is locked by voice processing
