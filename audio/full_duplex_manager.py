@@ -86,6 +86,24 @@ class FullDuplexManager:
         print(f"[FullDuplex] 🎯 Buddy Interrupt Threshold: {self.buddy_interrupt_threshold}")
         print(f"[FullDuplex] 🔄 Initial State: {self.conversation_state}")
 
+        # ✅ ADVANCED: Add room-scale detection settings
+        self.room_scale_mode = getattr(globals().get('config', {}), 'ROOM_SCALE_MODE', True)
+        self.detection_tiers = getattr(globals().get('config', {}), 'DETECTION_TIERS', {
+            "close": {"volume": 800, "quality": 0.6, "range": "0-50cm"},
+            "medium": {"volume": 400, "quality": 0.35, "range": "50cm-1.5m"},  
+            "far": {"volume": 200, "quality": 0.20, "range": "1.5m-3m"},
+            "room": {"volume": 100, "quality": 0.15, "range": "3m+"}
+        })
+        
+        # Cascading detection settings
+        self.cascading_detection = getattr(globals().get('config', {}), 'CASCADING_DETECTION', True)
+        self.strict_mode_first = getattr(globals().get('config', {}), 'STRICT_MODE_FIRST', True)
+        
+        print(f"[FullDuplex] 🧠 Room-Scale Detection:")
+        print(f"[FullDuplex]   - Room Scale Mode: {self.room_scale_mode}")
+        print(f"[FullDuplex]   - Detection Tiers: {len(self.detection_tiers)} ranges")
+        print(f"[FullDuplex]   - Cascading Detection: {self.cascading_detection}")
+
         # ✅ ADVANCED: Add advanced voice detection thresholds
         self.user_speech_quality_threshold = getattr(globals().get('config', {}), 'USER_SPEECH_QUALITY_THRESHOLD', 0.6)
         self.user_speech_spectral_threshold = getattr(globals().get('config', {}), 'USER_SPEECH_SPECTRAL_THRESHOLD', 0.5)
@@ -333,44 +351,106 @@ class FullDuplexManager:
                 volume = details.get('volume', np.abs(chunk).mean())
                 peak = details.get('peak', np.max(np.abs(chunk)))
 
-                # ✅ STATE 1: WAITING_FOR_INPUT - CALIBRATED for YOUR voice profile
+                # ✅ STATE 1: WAITING_FOR_INPUT - ROOM-SCALE DETECTION with distance-adaptive thresholds
                 if state == "WAITING_FOR_INPUT" and user_detection_active:
-                    # 🎯 CALIBRATED: Background ~500, Others ~1100, YOU ~5000+, score ~0.62+
-                    background_level = 1200        # Above others talking
-                    your_voice_level = 3500        # Well below your typical 5000
-                    combined_threshold = 0.55      # Just below your typical 0.62+
-                    instant_level = 4500           # Your typical speaking volume
-                    
-                    # Multiple detection methods calibrated to YOUR voice
-                    instant_trigger = volume > instant_level  # Your strong voice
-                    volume_trigger = volume > your_voice_level  # Clear voice detection
-                    quality_trigger = voice_score > combined_threshold and volume > background_level  # Quality + volume
-                    
-                    speech_detected = instant_trigger or volume_trigger or quality_trigger
-                    
-                    if speech_detected:
-                        self.speech_frames += 1
+                    if self.room_scale_mode and self.cascading_detection:
+                        # ✅ NEW: Cascading detection - try each tier
+                        speech_detected = False
+                        detection_method = "none"
+                        detection_tier = "none"
                         
-                        if DEBUG and current_time - last_debug_time > 0.5:
-                            method = "INSTANT" if instant_trigger else ("VOLUME" if volume_trigger else "QUALITY")
-                            print(f"🎯 [TURN] YOUR speech building ({method}): {self.speech_frames}/{self.user_min_speech_frames} "
-                                  f"(score:{voice_score:.2f}, vol:{volume:.0f})")
-                            last_debug_time = current_time
+                        # Try each detection tier from closest to farthest
+                        for tier_name in ["close", "medium", "far", "room"]:
+                            if tier_name in self.detection_tiers:
+                                tier = self.detection_tiers[tier_name]
+                                volume_threshold = tier.get('volume', 800)
+                                quality_threshold = tier.get('quality', 0.6)
+                                
+                                # Check if this tier detects speech
+                                volume_match = volume > volume_threshold
+                                quality_match = voice_score > quality_threshold
+                                
+                                # Additional spectral check for distant speech
+                                spectral_threshold = 0.15 if tier_name in ["far", "room"] else 0.25
+                                spectral_match = details.get('spectral', 0) > spectral_threshold
+                                
+                                if volume_match and quality_match and spectral_match:
+                                    speech_detected = True
+                                    detection_method = f"{tier_name.upper()}_TIER"
+                                    detection_tier = tier_name
+                                    break
                         
-                        if self.speech_frames >= self.user_min_speech_frames:
-                            method = "INSTANT" if instant_trigger else ("VOLUME" if volume_trigger else "QUALITY")
-                            print(f"\n🎯 [FullDuplex] 🎤 YOUR SPEECH DETECTED! ({method}, score:{voice_score:.2f}, vol:{volume:.0f})")
-                            if hasattr(self, 'start_user_turn'):
-                                self.start_user_turn()
-                            self._start_user_speech_capture()
-                            self.speech_frames = 0
+                        if speech_detected:
+                            self.speech_frames += 1
+                            
+                            if DEBUG and current_time - last_debug_time > 0.5:
+                                print(f"🎯 [ROOM-SCALE] Speech building ({detection_method}): {self.speech_frames}/{self.user_min_speech_frames} "
+                                      f"(score:{voice_score:.2f}, vol:{volume:.0f}, tier:{detection_tier})")
+                                last_debug_time = current_time
+                            
+                            if self.speech_frames >= self.user_min_speech_frames:
+                                print(f"\n🎯 [FullDuplex] 🎤 ROOM-SCALE SPEECH DETECTED! ({detection_method}, tier:{detection_tier}, score:{voice_score:.2f}, vol:{volume:.0f})")
+                                if hasattr(self, 'start_user_turn'):
+                                    self.start_user_turn()
+                                self._start_user_speech_capture()
+                                self.speech_frames = 0
+                        else:
+                            self.speech_frames = max(0, self.speech_frames - 1)
+                            
+                            # Log rejection reasons for room-scale debugging
+                            if (DEBUG and self.log_rejection_reasons and volume > 50 and current_time - last_debug_time > 2.0):
+                                rejection_reasons = []
+                                for tier_name in ["close", "medium", "far", "room"]:
+                                    if tier_name in self.detection_tiers:
+                                        tier = self.detection_tiers[tier_name]
+                                        vol_req = tier.get('volume', 800)
+                                        qual_req = tier.get('quality', 0.6)
+                                        if volume < vol_req:
+                                            rejection_reasons.append(f"{tier_name}:vol<{vol_req}")
+                                        elif voice_score < qual_req:
+                                            rejection_reasons.append(f"{tier_name}:qual<{qual_req}")
+                                
+                                print(f"🎯 [ROOM-SCALE] ❌ Rejected: vol={volume:.0f}, score={voice_score:.2f} ({', '.join(rejection_reasons[:2])})")
+                                last_debug_time = current_time
+                    
                     else:
-                        self.speech_frames = max(0, self.speech_frames - 1)
+                        # ✅ FALLBACK: Original calibrated detection for YOUR voice profile
+                        # 🎯 CALIBRATED: Background ~500, Others ~1100, YOU ~5000+, score ~0.62+
+                        background_level = 1200        # Above others talking
+                        your_voice_level = 3500        # Well below your typical 5000
+                        combined_threshold = 0.55      # Just below your typical 0.62+
+                        instant_level = 4500           # Your typical speaking volume
                         
-                        # Log rejection reasons with YOUR thresholds
-                        if (DEBUG and volume > 1000 and current_time - last_debug_time > 2.0):
-                            print(f"🎯 [TURN] ❌ Rejected: vol={volume:.0f} (need >3500), score={voice_score:.2f} (need >0.55)")
-                            last_debug_time = current_time
+                        # Multiple detection methods calibrated to YOUR voice
+                        instant_trigger = volume > instant_level  # Your strong voice
+                        volume_trigger = volume > your_voice_level  # Clear voice detection
+                        quality_trigger = voice_score > combined_threshold and volume > background_level  # Quality + volume
+                        
+                        speech_detected = instant_trigger or volume_trigger or quality_trigger
+                        
+                        if speech_detected:
+                            self.speech_frames += 1
+                            
+                            if DEBUG and current_time - last_debug_time > 0.5:
+                                method = "INSTANT" if instant_trigger else ("VOLUME" if volume_trigger else "QUALITY")
+                                print(f"🎯 [TURN] YOUR speech building ({method}): {self.speech_frames}/{self.user_min_speech_frames} "
+                                      f"(score:{voice_score:.2f}, vol:{volume:.0f})")
+                                last_debug_time = current_time
+                            
+                            if self.speech_frames >= self.user_min_speech_frames:
+                                method = "INSTANT" if instant_trigger else ("VOLUME" if volume_trigger else "QUALITY")
+                                print(f"\n🎯 [FullDuplex] 🎤 YOUR SPEECH DETECTED! ({method}, score:{voice_score:.2f}, vol:{volume:.0f})")
+                                if hasattr(self, 'start_user_turn'):
+                                    self.start_user_turn()
+                                self._start_user_speech_capture()
+                                self.speech_frames = 0
+                        else:
+                            self.speech_frames = max(0, self.speech_frames - 1)
+                            
+                            # Log rejection reasons with YOUR thresholds
+                            if (DEBUG and volume > 1000 and current_time - last_debug_time > 2.0):
+                                print(f"🎯 [TURN] ❌ Rejected: vol={volume:.0f} (need >3500), score={voice_score:.2f} (need >0.55)")
+                                last_debug_time = current_time
 
                 # ✅ STATE 2: USER_SPEAKING - CALIBRATED for when YOU stop talking
                 elif state == "USER_SPEAKING":
