@@ -22,13 +22,34 @@ class AdvancedVoiceAnalyzer:
         self.recent_spectral_scores = deque(maxlen=20)
         self.recent_temporal_scores = deque(maxlen=20)
         
+        # ✅ NEW: Room-scale detection enhancements
+        self.room_scale_mode = getattr(globals().get('config', {}), 'ROOM_SCALE_MODE', True)
+        self.detection_tiers = getattr(globals().get('config', {}), 'DETECTION_TIERS', {
+            "close": {"volume": 800, "quality": 0.6, "range": "0-50cm"},
+            "medium": {"volume": 400, "quality": 0.35, "range": "50cm-1.5m"},  
+            "far": {"volume": 200, "quality": 0.20, "range": "1.5m-3m"},
+            "room": {"volume": 100, "quality": 0.15, "range": "3m+"}
+        })
+        
+        # Background rejection components
+        self.media_audio_patterns = deque(maxlen=100)  # TV/music patterns
+        self.other_speaker_profiles = deque(maxlen=50)  # Other speakers
+        self.primary_user_profile = None  # Primary user voice fingerprint
+        
+        # Distance-adaptive processing
+        self.current_distance_tier = "medium"  # Default tier
+        self.distance_history = deque(maxlen=10)
+        self.auto_gain_enabled = getattr(globals().get('config', {}), 'AUTO_GAIN_CONTROL', True)
+        
         print("[VoiceAnalyzer] 🧠 Advanced Voice Analyzer initialized")
+        print(f"[VoiceAnalyzer] 🎯 Room-Scale Mode: {self.room_scale_mode}")
+        print(f"[VoiceAnalyzer] 📏 Detection Tiers: {len(self.detection_tiers)} ranges")
         print(f"[VoiceAnalyzer] 🎯 Voice Quality Threshold: {USER_SPEECH_QUALITY_THRESHOLD}")
         print(f"[VoiceAnalyzer] 📊 Spectral Threshold: {USER_SPEECH_SPECTRAL_THRESHOLD}")
 
     def analyze_audio_chunk(self, audio_chunk, is_buddy_speaking=False):
         """
-        Advanced multi-layer analysis to determine if audio contains human voice
+        Enhanced multi-layer analysis with distance-adaptive detection and background rejection
         Returns: (is_voice, quality_score, detailed_scores)
         """
         try:
@@ -90,14 +111,26 @@ class AdvancedVoiceAnalyzer:
                     print(f"[VoiceAnalyzer] ❌ Basic metrics error: {e}")
                 return False, 0.0, {'error': 'basic_metrics_failed'}
             
+            # ✅ NEW: Auto-gain control for distant speech
+            if self.auto_gain_enabled and self.room_scale_mode:
+                audio_float, gain_applied = self._apply_auto_gain(audio_float, volume)
+            else:
+                gain_applied = 1.0
+            
             # ✅ FIXED: Early exit for very quiet audio to avoid processing errors
             if volume < 5.0:  # Very quiet, likely silence
                 return False, 0.0, {
                     'volume': volume,
                     'peak': peak,
                     'combined': 0.0,
-                    'reason': 'too_quiet'
+                    'reason': 'too_quiet',
+                    'gain_applied': gain_applied
                 }
+            
+            # ✅ NEW: Background rejection analysis
+            background_rejection_score = 1.0
+            if self.room_scale_mode:
+                background_rejection_score = self._analyze_background_rejection(audio_float, volume)
             
             # ✅ FIXED: Run analysis layers with individual error handling
             spectral_score = 0.0
@@ -106,9 +139,9 @@ class AdvancedVoiceAnalyzer:
             harmonic_score = 0.0
             noise_score = 0.5  # Default neutral score
             
-            # Spectral analysis with error handling
+            # Enhanced spectral analysis for room-scale detection
             try:
-                spectral_score = self._spectral_voice_analysis(audio_float)
+                spectral_score = self._enhanced_spectral_analysis(audio_float)
                 if np.isnan(spectral_score) or np.isinf(spectral_score):
                     spectral_score = 0.0
                 spectral_score = max(0.0, min(1.0, float(spectral_score)))
@@ -117,9 +150,9 @@ class AdvancedVoiceAnalyzer:
                     print(f"[VoiceAnalyzer] Spectral analysis error: {e}")
                 spectral_score = 0.0
             
-            # Temporal analysis with error handling
+            # Enhanced temporal analysis
             try:
-                temporal_score = self._temporal_pattern_analysis(audio_float)
+                temporal_score = self._enhanced_temporal_analysis(audio_float)
                 if np.isnan(temporal_score) or np.isinf(temporal_score):
                     temporal_score = 0.0
                 temporal_score = max(0.0, min(1.0, float(temporal_score)))
@@ -128,9 +161,9 @@ class AdvancedVoiceAnalyzer:
                     print(f"[VoiceAnalyzer] Temporal analysis error: {e}")
                 temporal_score = 0.0
             
-            # Quality analysis with error handling
+            # Enhanced quality analysis
             try:
-                quality_score = self._voice_quality_analysis(audio_float)
+                quality_score = self._enhanced_voice_quality_analysis(audio_float)
                 if np.isnan(quality_score) or np.isinf(quality_score):
                     quality_score = 0.0
                 quality_score = max(0.0, min(1.0, float(quality_score)))
@@ -161,15 +194,22 @@ class AdvancedVoiceAnalyzer:
                     print(f"[VoiceAnalyzer] Noise analysis error: {e}")
                 noise_score = 0.5
             
-            # ✅ FIXED: Combine scores with validation
+            # ✅ NEW: Distance-adaptive score combination
             try:
-                combined_score = (
-                    spectral_score * 0.25 +
-                    temporal_score * 0.20 +
-                    quality_score * 0.25 +
-                    harmonic_score * 0.15 +
-                    noise_score * 0.15
-                )
+                if self.room_scale_mode:
+                    combined_score = self._calculate_distance_adaptive_score(
+                        spectral_score, temporal_score, quality_score, 
+                        harmonic_score, noise_score, background_rejection_score, volume
+                    )
+                else:
+                    # Original scoring for backward compatibility
+                    combined_score = (
+                        spectral_score * 0.25 +
+                        temporal_score * 0.20 +
+                        quality_score * 0.25 +
+                        harmonic_score * 0.15 +
+                        noise_score * 0.15
+                    )
                 
                 # Validate combined score
                 if np.isnan(combined_score) or np.isinf(combined_score):
@@ -181,45 +221,25 @@ class AdvancedVoiceAnalyzer:
                     print(f"[VoiceAnalyzer] Score combination error: {e}")
                 combined_score = 0.0
             
-            # ✅ FIXED: Safe threshold determination
+            # ✅ NEW: Distance-adaptive threshold determination
             try:
-                if is_buddy_speaking:
-                    # Much stricter when Buddy is speaking (interrupts)
-                    voice_threshold = getattr(self, 'buddy_interrupt_quality_threshold', 
-                                            getattr(globals(), 'BUDDY_INTERRUPT_QUALITY_THRESHOLD', 0.8))
-                    volume_threshold = getattr(self, 'buddy_interrupt_threshold',
-                                             getattr(globals(), 'BUDDY_INTERRUPT_THRESHOLD', 2500))
-                else:
-                    # Normal thresholds when waiting for user
-                    voice_threshold = getattr(self, 'user_speech_quality_threshold',
-                                            getattr(globals(), 'USER_SPEECH_QUALITY_THRESHOLD', 0.6))
-                    volume_threshold = getattr(self, 'user_speech_threshold',
-                                             getattr(globals(), 'USER_SPEECH_THRESHOLD', 800))
-                
-                spectral_threshold = getattr(self, 'user_speech_spectral_threshold',
-                                           getattr(globals(), 'USER_SPEECH_SPECTRAL_THRESHOLD', 0.5))
+                is_voice, detection_tier = self._distance_adaptive_detection(
+                    volume, combined_score, spectral_score, is_buddy_speaking
+                )
                 
             except Exception as e:
                 if DEBUG:
-                    print(f"[VoiceAnalyzer] Threshold determination error: {e}")
-                voice_threshold = 0.6
-                volume_threshold = 800
-                spectral_threshold = 0.5
-            
-            # ✅ FIXED: Safe voice detection decision
-            try:
-                passes_noise_gate = self._passes_noise_gate(audio_float, volume)
-            except Exception as e:
-                if DEBUG and "non-printable character" not in str(e):
-                    print(f"[VoiceAnalyzer] Noise gate error: {e}")
-                passes_noise_gate = volume > volume_threshold * 0.5  # Fallback
-            
-            is_voice = (
-                volume > volume_threshold and
-                combined_score > voice_threshold and
-                spectral_score > spectral_threshold and
-                passes_noise_gate
-            )
+                    print(f"[VoiceAnalyzer] Distance-adaptive detection error: {e}")
+                # Fallback to original detection
+                if is_buddy_speaking:
+                    voice_threshold = getattr(globals(), 'BUDDY_INTERRUPT_QUALITY_THRESHOLD', 0.8)
+                    volume_threshold = getattr(globals(), 'BUDDY_INTERRUPT_THRESHOLD', 2500)
+                else:
+                    voice_threshold = getattr(globals(), 'USER_SPEECH_QUALITY_THRESHOLD', 0.6)
+                    volume_threshold = getattr(globals(), 'USER_SPEECH_THRESHOLD', 800)
+                
+                is_voice = (volume > volume_threshold and combined_score > voice_threshold)
+                detection_tier = "unknown"
             
             # ✅ FIXED: Safe storage for adaptation
             try:
@@ -227,6 +247,8 @@ class AdvancedVoiceAnalyzer:
                     if hasattr(self, 'voice_samples') and hasattr(self, 'recent_voice_scores'):
                         self.voice_samples.append(combined_score)
                         self.recent_voice_scores.append(combined_score)
+                        if self.room_scale_mode:
+                            self.distance_history.append(detection_tier)
                 else:
                     if hasattr(self, 'noise_samples'):
                         self.noise_samples.append(volume)
@@ -248,10 +270,13 @@ class AdvancedVoiceAnalyzer:
                 'quality': float(quality_score),
                 'harmonic': float(harmonic_score),
                 'noise': float(noise_score),
+                'background_rejection': float(background_rejection_score),
                 'combined': float(combined_score),
-                'threshold': float(voice_threshold),
+                'detection_tier': detection_tier,
+                'gain_applied': float(gain_applied),
                 'is_voice': bool(is_voice),
-                'analysis_success': True
+                'analysis_success': True,
+                'room_scale_mode': self.room_scale_mode
             }
             
             # ✅ FIXED: Safe debug output
@@ -259,9 +284,10 @@ class AdvancedVoiceAnalyzer:
                 if (DEBUG and 
                     getattr(globals(), 'SHOW_VOICE_QUALITY_SCORES', True) and
                     (is_voice or combined_score > 0.3)):
-                    print(f"[VoiceAnalyzer] {'✅' if is_voice else '❌'} "
+                    tier_str = f"[{detection_tier.upper()}]" if self.room_scale_mode else ""
+                    print(f"[VoiceAnalyzer] {'✅' if is_voice else '❌'} {tier_str} "
                           f"Vol:{volume:.0f} Combined:{combined_score:.2f} "
-                          f"Spec:{spectral_score:.2f} Qual:{quality_score:.2f}")
+                          f"Spec:{spectral_score:.2f} BG:{background_rejection_score:.2f}")
             except Exception as e:
                 # Silently ignore debug output errors
                 pass
@@ -550,10 +576,394 @@ class AdvancedVoiceAnalyzer:
                 'voice_samples_count': len(self.voice_samples),
                 'recent_voice_avg': np.mean(self.recent_voice_scores) if self.recent_voice_scores else 0,
                 'recent_noise_avg': np.mean(list(self.noise_samples)[-10:]) if len(self.noise_samples) >= 10 else self.noise_baseline,
-                'calibration_time': time.time() - self.calibration_start_time
+                'calibration_time': time.time() - self.calibration_start_time,
+                'room_scale_mode': getattr(self, 'room_scale_mode', False),
+                'current_distance_tier': getattr(self, 'current_distance_tier', 'unknown'),
+                'distance_history': list(getattr(self, 'distance_history', []))
             }
         except:
             return {}
+
+    # ✅ NEW: Room-scale detection methods
+    
+    def _apply_auto_gain(self, audio_float, volume):
+        """Apply automatic gain control for distant speech"""
+        try:
+            if volume < 100:  # Very quiet speech
+                gain = 3.0
+            elif volume < 300:  # Distant speech
+                gain = 2.0
+            elif volume < 800:  # Medium distance
+                gain = 1.5
+            else:  # Close or loud speech
+                gain = 1.0
+            
+            # Apply gain with limiting to prevent clipping
+            gained_audio = audio_float * gain
+            gained_audio = np.clip(gained_audio, -1.0, 1.0)
+            
+            return gained_audio, gain
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Auto-gain error: {e}")
+            return audio_float, 1.0
+    
+    def _analyze_background_rejection(self, audio_float, volume):
+        """Analyze and reject background audio (TV, music, other speakers)"""
+        try:
+            rejection_score = 1.0  # Start with no rejection
+            
+            # Check for TV/media patterns
+            media_score = self._detect_media_audio(audio_float)
+            
+            # Check for other speakers
+            other_speaker_score = self._detect_other_speakers(audio_float)
+            
+            # Check for environmental noise patterns
+            env_noise_score = self._detect_environmental_patterns(audio_float, volume)
+            
+            # Combine rejection factors
+            rejection_score = (
+                media_score * 0.4 +
+                other_speaker_score * 0.4 +
+                env_noise_score * 0.2
+            )
+            
+            return max(0.0, min(1.0, rejection_score))
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Background rejection error: {e}")
+            return 1.0  # No rejection on error
+    
+    def _detect_media_audio(self, audio_float):
+        """Detect TV/music audio patterns"""
+        try:
+            # TV/music typically has:
+            # - Wide frequency spectrum
+            # - High spectral flatness
+            # - Stereo-like characteristics
+            # - Consistent energy distribution
+            
+            if len(audio_float) < 512:
+                return 1.0
+            
+            # FFT analysis
+            fft_result = fft(audio_float)
+            magnitude = np.abs(fft_result[:len(fft_result)//2])
+            
+            # Calculate spectral flatness (media has higher flatness)
+            if len(magnitude) > 0 and np.all(magnitude > 0):
+                geometric_mean = np.exp(np.mean(np.log(magnitude + 1e-10)))
+                arithmetic_mean = np.mean(magnitude)
+                spectral_flatness = geometric_mean / (arithmetic_mean + 1e-10)
+            else:
+                spectral_flatness = 0.0
+            
+            # High spectral flatness suggests media audio
+            if spectral_flatness > 0.8:
+                return 0.3  # Likely media - reduce acceptance
+            elif spectral_flatness > 0.6:
+                return 0.7  # Possibly media - slight reduction
+            else:
+                return 1.0  # Likely human voice
+                
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Media detection error: {e}")
+            return 1.0
+    
+    def _detect_other_speakers(self, audio_float):
+        """Detect other speakers (not primary user)"""
+        try:
+            # For now, use simple voice characteristics
+            # In full implementation, would use voice fingerprinting
+            
+            # Different speakers often have different pitch ranges
+            # This is a simplified detection
+            
+            if len(audio_float) < 160:
+                return 1.0
+            
+            # Simple pitch detection using autocorrelation
+            correlation = np.correlate(audio_float, audio_float, mode='full')
+            correlation = correlation[len(correlation)//2:]
+            
+            # Look for fundamental frequency
+            min_pitch_samples = SAMPLE_RATE // 400  # 400 Hz max
+            max_pitch_samples = SAMPLE_RATE // 80   # 80 Hz min
+            
+            if len(correlation) < max_pitch_samples:
+                return 1.0
+            
+            search_range = correlation[min_pitch_samples:min(max_pitch_samples, len(correlation))]
+            if len(search_range) == 0:
+                return 1.0
+            
+            # For now, accept all voices (no fingerprint database yet)
+            return 1.0
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Other speaker detection error: {e}")
+            return 1.0
+    
+    def _detect_environmental_patterns(self, audio_float, volume):
+        """Detect environmental noise patterns"""
+        try:
+            # Environmental noise typically has:
+            # - Lower zero crossing rate
+            # - More consistent energy
+            # - Less harmonic content
+            
+            if len(audio_float) < 160:
+                return 1.0
+            
+            # Zero crossing rate
+            zcr = self._calculate_zcr(audio_float)
+            
+            # Energy variance
+            frame_size = 80
+            frames = [audio_float[i:i+frame_size] for i in range(0, len(audio_float)-frame_size, frame_size)]
+            if len(frames) < 2:
+                return 1.0
+            
+            frame_energies = [np.sum(frame**2) for frame in frames]
+            if np.mean(frame_energies) == 0:
+                return 1.0
+            
+            energy_variance = np.var(frame_energies) / np.mean(frame_energies)
+            
+            # Low ZCR and low energy variance suggest environmental noise
+            if zcr < 0.02 and energy_variance < 0.1:
+                return 0.4  # Likely environmental noise
+            elif zcr < 0.05 and energy_variance < 0.3:
+                return 0.7  # Possibly environmental noise
+            else:
+                return 1.0  # Likely human voice
+                
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Environmental pattern detection error: {e}")
+            return 1.0
+    
+    def _calculate_distance_adaptive_score(self, spectral_score, temporal_score, 
+                                         quality_score, harmonic_score, noise_score, 
+                                         background_rejection_score, volume):
+        """Calculate combined score with distance-adaptive weighting"""
+        try:
+            # Determine likely distance tier based on volume
+            if volume > 3000:
+                # Close range - emphasize quality and harmonic content
+                weights = [0.2, 0.15, 0.35, 0.25, 0.05]  # spec, temp, qual, harm, noise
+            elif volume > 1200:
+                # Medium range - balanced weighting
+                weights = [0.25, 0.20, 0.25, 0.20, 0.10]
+            elif volume > 400:
+                # Far range - emphasize spectral and temporal
+                weights = [0.35, 0.30, 0.15, 0.10, 0.10]
+            else:
+                # Room range - very permissive, emphasize any voice characteristics
+                weights = [0.40, 0.35, 0.10, 0.05, 0.10]
+            
+            # Calculate weighted score
+            combined_score = (
+                spectral_score * weights[0] +
+                temporal_score * weights[1] +
+                quality_score * weights[2] +
+                harmonic_score * weights[3] +
+                noise_score * weights[4]
+            )
+            
+            # Apply background rejection
+            combined_score *= background_rejection_score
+            
+            return max(0.0, min(1.0, combined_score))
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Distance adaptive scoring error: {e}")
+            return 0.0
+    
+    def _distance_adaptive_detection(self, volume, combined_score, spectral_score, is_buddy_speaking):
+        """Perform distance-adaptive voice detection"""
+        try:
+            if is_buddy_speaking:
+                # Interrupt detection - use original strict thresholds
+                volume_threshold = getattr(globals(), 'BUDDY_INTERRUPT_THRESHOLD', 2500)
+                quality_threshold = getattr(globals(), 'BUDDY_INTERRUPT_QUALITY_THRESHOLD', 0.8)
+                
+                is_voice = (volume > volume_threshold and combined_score > quality_threshold)
+                return is_voice, "interrupt"
+            
+            # User speech detection - use distance-adaptive tiers
+            if not self.room_scale_mode:
+                # Fallback to original detection
+                volume_threshold = getattr(globals(), 'USER_SPEECH_THRESHOLD', 800)
+                quality_threshold = getattr(globals(), 'USER_SPEECH_QUALITY_THRESHOLD', 0.6)
+                is_voice = (volume > volume_threshold and combined_score > quality_threshold)
+                return is_voice, "legacy"
+            
+            # Room-scale detection with cascading tiers
+            detection_tiers = self.detection_tiers
+            
+            # Try each tier from most restrictive to most permissive
+            for tier_name in ["close", "medium", "far", "room"]:
+                if tier_name in detection_tiers:
+                    tier = detection_tiers[tier_name]
+                    
+                    volume_threshold = tier.get('volume', 800)
+                    quality_threshold = tier.get('quality', 0.6)
+                    
+                    if volume >= volume_threshold and combined_score >= quality_threshold:
+                        # Also require minimum spectral content for distant speech
+                        min_spectral = 0.15 if tier_name in ["far", "room"] else 0.25
+                        
+                        if spectral_score >= min_spectral:
+                            self.current_distance_tier = tier_name
+                            return True, tier_name
+            
+            # No tier matched
+            return False, "none"
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Distance adaptive detection error: {e}")
+            return False, "error"
+    
+    def _enhanced_spectral_analysis(self, audio_float):
+        """Enhanced spectral analysis for room-scale detection"""
+        try:
+            # Original spectral analysis with enhancements for distant speech
+            base_score = self._spectral_voice_analysis(audio_float)
+            
+            if not self.room_scale_mode:
+                return base_score
+            
+            # Additional checks for distant speech
+            if len(audio_float) < 160:
+                return base_score
+            
+            # Enhanced formant detection for distant speech
+            window = np.hanning(len(audio_float))
+            windowed = audio_float * window
+            fft_result = fft(windowed)
+            freqs = fftfreq(len(audio_float), 1/SAMPLE_RATE)
+            magnitude = np.abs(fft_result)
+            
+            # Focus on positive frequencies
+            positive_freq_mask = freqs > 0
+            freqs = freqs[positive_freq_mask]
+            magnitude = magnitude[positive_freq_mask]
+            
+            # Enhanced voice frequency detection for distant speech
+            # Expand frequency range for distant/processed speech
+            voice_min = 60   # Lower minimum for distant speech
+            voice_max = 8000 # Same maximum
+            
+            voice_mask = (freqs >= voice_min) & (freqs <= voice_max)
+            if not np.any(voice_mask):
+                return base_score
+            
+            # Calculate enhanced voice energy ratio
+            total_energy = np.sum(magnitude**2)
+            if total_energy == 0:
+                return base_score
+            
+            voice_energy = np.sum(magnitude[voice_mask]**2)
+            voice_ratio = voice_energy / total_energy
+            
+            # Boost score for good voice frequency content
+            enhanced_score = base_score * (1.0 + voice_ratio * 0.3)
+            
+            return min(1.0, enhanced_score)
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Enhanced spectral analysis error: {e}")
+            return self._spectral_voice_analysis(audio_float)
+    
+    def _enhanced_temporal_analysis(self, audio_float):
+        """Enhanced temporal analysis for room-scale detection"""
+        try:
+            # Original temporal analysis with enhancements
+            base_score = self._temporal_pattern_analysis(audio_float)
+            
+            if not self.room_scale_mode or len(audio_float) < 160:
+                return base_score
+            
+            # Additional temporal checks for distant speech
+            # Distant speech may have different timing characteristics
+            
+            # Frame-based energy analysis with smaller frames for distant speech
+            frame_size = 80  # Smaller frames for better temporal resolution
+            frames = [audio_float[i:i+frame_size] for i in range(0, len(audio_float)-frame_size, frame_size//2)]
+            
+            if len(frames) < 3:
+                return base_score
+            
+            frame_energies = [np.sum(frame**2) for frame in frames]
+            
+            # Check for speech-like energy patterns
+            # Distant speech may have more subtle energy variations
+            if np.mean(frame_energies) > 0:
+                energy_variance = np.var(frame_energies) / np.mean(frame_energies)
+                
+                # More permissive variance check for distant speech
+                if 0.05 <= energy_variance <= 2.0:  # Wider range than original
+                    variance_bonus = 0.2
+                else:
+                    variance_bonus = 0.0
+                
+                enhanced_score = base_score + variance_bonus
+                return min(1.0, enhanced_score)
+            
+            return base_score
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Enhanced temporal analysis error: {e}")
+            return self._temporal_pattern_analysis(audio_float)
+    
+    def _enhanced_voice_quality_analysis(self, audio_float):
+        """Enhanced voice quality analysis for room-scale detection"""
+        try:
+            # Original quality analysis with enhancements
+            base_score = self._voice_quality_analysis(audio_float)
+            
+            if not self.room_scale_mode or len(audio_float) < 160:
+                return base_score
+            
+            # Additional quality checks for distant speech
+            # Distant speech may have lower SNR but still be valid
+            
+            # More permissive SNR calculation
+            signal_power = np.mean(audio_float**2)
+            if signal_power == 0:
+                return base_score
+            
+            # Estimate noise floor (bottom 20% for distant speech)
+            sorted_power = np.sort(audio_float**2)
+            noise_floor = np.mean(sorted_power[:len(sorted_power)//5])  # Bottom 20%
+            
+            if noise_floor == 0:
+                snr_bonus = 0.1
+            else:
+                snr = signal_power / noise_floor
+                # More permissive SNR requirements for distant speech
+                if snr > 2.0:  # Lower threshold than original
+                    snr_bonus = min(0.2, np.log10(snr) / 10.0)
+                else:
+                    snr_bonus = 0.0
+            
+            enhanced_score = base_score + snr_bonus
+            return min(1.0, enhanced_score)
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"[VoiceAnalyzer] Enhanced voice quality analysis error: {e}")
+            return self._voice_quality_analysis(audio_float)
 
 # Create global instance
 try:

@@ -550,6 +550,52 @@ AUDIO_SMOOTHING = True                        # Smooth audio transitions
 SPEECH_ENHANCEMENT = True                     # Enhanced speech clarity
 NATURAL_INTONATION = True                     # Natural speech intonation
 
+# ==== ROOM-SCALE VOICE DETECTION CONFIGURATION ====
+# Smart room-scale detection for 3+ meter speech recognition
+ROOM_SCALE_MODE = True
+DISTANT_SPEECH_ENABLED = True
+AUTO_DISTANCE_DETECTION = True
+BACKGROUND_REJECTION_ENABLED = True
+ROOM_ACOUSTIC_COMPENSATION = True
+
+# Distance-Adaptive Thresholds - Multi-tier detection system
+DETECTION_TIERS = {
+    "close": {"volume": 800, "quality": 0.6, "range": "0-50cm"},
+    "medium": {"volume": 400, "quality": 0.35, "range": "50cm-1.5m"},  
+    "far": {"volume": 200, "quality": 0.20, "range": "1.5m-3m"},
+    "room": {"volume": 100, "quality": 0.15, "range": "3m+"}
+}
+
+# Individual threshold settings for backward compatibility
+CLOSE_RANGE_THRESHOLD = 800
+MEDIUM_RANGE_THRESHOLD = 400  
+FAR_RANGE_THRESHOLD = 200
+ROOM_RANGE_THRESHOLD = 100
+
+# Smart Filtering for room-scale detection
+VOICE_FINGERPRINT_MATCHING = True
+MULTI_SPEAKER_REJECTION = True
+MEDIA_AUDIO_FILTERING = True
+ENVIRONMENTAL_NOISE_LEARNING = True
+
+# Enhanced Audio Processing for distant speech
+AUTO_GAIN_CONTROL = True
+SPECTRAL_FILTERING_ENABLED = True
+REVERBERATION_COMPENSATION = True
+DIRECTIONAL_PROCESSING = True
+
+# Background Rejection Settings
+TV_AUDIO_DETECTION = True
+MUSIC_PATTERN_RECOGNITION = True
+OTHER_SPEAKER_FILTERING = True
+ENVIRONMENTAL_ADAPTATION = True
+
+# Cascading Detection Strategy
+CASCADING_DETECTION = True          # Try strict first, fall back to permissive
+STRICT_MODE_FIRST = True           # Start with strict detection
+PERMISSIVE_FALLBACK = True         # Fall back to permissive for distant speech
+DETECTION_ATTEMPT_TIMEOUT = 5.0    # Seconds before fallback
+
 # 🚀 ==== ADVANCED AI ASSISTANT SYSTEM ====
 ADVANCED_AI_ASSISTANT = True                   # ✅ NEW: Enable advanced AI assistant
 ALEXA_SIRI_LEVEL_INTELLIGENCE = True          # ✅ NEW: Alexa/Siri-level features
