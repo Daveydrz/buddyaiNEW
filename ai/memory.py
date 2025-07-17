@@ -913,7 +913,7 @@ def get_user_memory(username: str) -> UserMemorySystem:
 
 # Enhanced conversation functions
 def add_to_conversation_history(username, user_message, ai_response):
-    """🧠 Enhanced conversation history with mega-intelligent memory extraction"""
+    """🧠 Enhanced conversation history with mega-intelligent memory extraction + TEMPORAL AWARENESS"""
     try:
         if username not in conversation_history:
             conversation_history[username] = []
@@ -941,6 +941,34 @@ def add_to_conversation_history(username, user_message, ai_response):
             if topic != "general":
                 keywords = re.findall(r'\b\w+\b', user_message.lower())
                 memory.add_conversation_topic(topic, keywords[:4])
+        
+        # ✅ NEW: Integrate with temporal awareness
+        try:
+            from ai.temporal_awareness import temporal_awareness
+            
+            # Create episodic memory for this conversation exchange
+            temporal_awareness.create_episodic_memory(
+                f"Conversation with {username}: {user_message[:50]}...",
+                duration=datetime.timedelta(seconds=30),  # Estimated conversation duration
+                participants=[username, "BuddyAI"],
+                emotional_tone="engaged",
+                significance=0.6 if len(user_message) > 20 else 0.4
+            )
+            
+            # Mark significant conversational moments
+            if any(word in user_message.lower() for word in ["important", "remember", "don't forget", "crucial"]):
+                temporal_awareness.mark_temporal_event(
+                    f"Important conversation point with {username}",
+                    significance=0.8,
+                    emotional_weight=0.7,
+                    context={"user": username, "topic": topic if 'topic' in locals() else "general"}
+                )
+                
+        except ImportError:
+            pass  # Temporal awareness not available
+        except Exception as temporal_error:
+            if DEBUG:
+                print(f"[MegaMemory] ⚠️ Temporal awareness integration error: {temporal_error}")
         
         if DEBUG:
             print(f"[MegaMemory] 💭 Added to MEGA-INTELLIGENT memory for {username}")
