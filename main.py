@@ -20,6 +20,16 @@ from ai.memory import validate_ai_response_appropriateness, add_to_conversation_
 from ai.chat_enhanced_smart import generate_response_streaming_with_smart_memory, reset_session_for_user_smart
 from ai.chat_enhanced_smart_with_fusion import generate_response_streaming_with_intelligent_fusion
 
+# ✅ ENTROPY SYSTEM: Import consciousness emergence components
+try:
+    from ai.entropy_engine import get_entropy_engine, inject_consciousness_entropy, should_surprise, get_random_hesitation
+    from ai.emotion import get_emotional_system, process_emotional_context, inject_emotional_surprise
+    print("[Main] 🌀 Entropy and consciousness systems loaded")
+    ENTROPY_SYSTEM_AVAILABLE = True
+except ImportError as e:
+    print(f"[Main] ⚠️ Entropy system not available: {e}")
+    ENTROPY_SYSTEM_AVAILABLE = False
+
 from voice.voice_manager_instance import voice_manager
 from voice.manager_names import UltraIntelligentNameManager
 
@@ -524,6 +534,21 @@ def handle_streaming_response(text, current_user):
             speak_streaming(f"Today is {brisbane_time['date']}.")
             return
         
+        # ✅ ENTROPY SYSTEM: Process emotional context and inject uncertainty
+        emotional_context = {}
+        if ENTROPY_SYSTEM_AVAILABLE:
+            try:
+                # Process emotional context with entropy
+                emotional_context = process_emotional_context(text, f"user_{current_user}")
+                print(f"[EntropyMain] 🎭 Emotional state: {emotional_context.get('primary_emotion', 'neutral')}")
+                
+                # Check for surprise injection
+                if should_surprise(f"response_to_{text[:30]}"):
+                    inject_emotional_surprise("main_response")
+                    print("[EntropyMain] 🎭 Surprise emotion injected into response flow")
+            except Exception as entropy_error:
+                print(f"[EntropyMain] ⚠️ Entropy processing error: {entropy_error}")
+        
         # ✅ ADVANCED AI: Natural conversation flow with VOICE-IDENTIFIED USER
         print(f"[AdvancedResponse] 🧠 Starting ADVANCED AI LLM streaming for VOICE USER: {current_user}")
         
@@ -548,6 +573,28 @@ def handle_streaming_response(text, current_user):
                     chunk_count += 1
                     chunk_text = chunk.strip()
                     
+                    # ✅ ENTROPY SYSTEM: Inject uncertainty and consciousness into response
+                    if ENTROPY_SYSTEM_AVAILABLE:
+                        try:
+                            # Inject textual entropy (hesitation, uncertainty markers)
+                            chunk_text = inject_consciousness_entropy("response", chunk_text)
+                            
+                            # Apply emotional modifiers if available
+                            if emotional_context and 'text_modifiers' in emotional_context:
+                                modifiers = emotional_context['text_modifiers']
+                                
+                                # Add hesitation markers
+                                if modifiers.get('hesitation_markers') and chunk_count == 1:  # Only first chunk
+                                    hesitation = get_entropy_engine().random_state.choice(modifiers['hesitation_markers'])
+                                    chunk_text = f"{hesitation}, {chunk_text}"
+                                
+                                # Add emotional punctuation
+                                if modifiers.get('emotional_punctuation'):
+                                    chunk_text = chunk_text.rstrip('.!?') + modifiers['emotional_punctuation']
+                                
+                        except Exception as chunk_entropy_error:
+                            print(f"[EntropyMain] ⚠️ Chunk entropy error: {chunk_entropy_error}")
+                    
                     if first_chunk:
                         print("[AdvancedResponse] 🎭 First ADVANCED chunk ready - starting natural speech!")
                         first_chunk = False
@@ -565,7 +612,7 @@ def handle_streaming_response(text, current_user):
                         print(f"[MegaMemory] ⚠️ Validation error for chunk {chunk_count}: {validation_error}")
                         # Continue with original chunk if validation fails
                     
-                    # ✅ SPEAK CHUNK (now validated)
+                    # ✅ SPEAK CHUNK (now validated and entropy-enhanced)
                     speak_streaming(chunk_text)
                     full_response += chunk_text + " "
                     
@@ -575,9 +622,17 @@ def handle_streaming_response(text, current_user):
                         response_interrupted = True
                         break  # ✅ CRITICAL: Break immediately!
                     
+                    # ✅ ENTROPY SYSTEM: Random pauses for natural hesitation
+                    natural_pause = 0.05  # Default pause
+                    if ENTROPY_SYSTEM_AVAILABLE:
+                        try:
+                            natural_pause = get_random_hesitation()
+                        except:
+                            pass
+                    
                     # Brief pause for natural flow (only if not interrupted)
                     if not (full_duplex_manager and full_duplex_manager.speech_interrupted):
-                        time.sleep(0.05)
+                        time.sleep(natural_pause)
         
         except (ConnectionError, ConnectionAbortedError, OSError) as conn_err:
             print(f"[AdvancedResponse] 🔌 Connection interrupted: {conn_err}")

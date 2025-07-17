@@ -1,4 +1,4 @@
-# ai/memory.py - MEGA-INTELLIGENT Memory System with Advanced Context Awareness
+# ai/memory.py - MEGA-INTELLIGENT Memory System with Advanced Context Awareness + ENTROPY
 import time
 import json
 import datetime
@@ -8,6 +8,15 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from config import MAX_HISTORY_LENGTH, DEBUG
 from enum import Enum
+
+# ✅ ENTROPY SYSTEM: Import consciousness emergence components for probabilistic memory
+try:
+    from ai.entropy_engine import get_entropy_engine, probabilistic_select, inject_consciousness_entropy, EntropyLevel
+    print("[Memory] 🌀 Entropy system integrated for probabilistic memory retrieval")
+    ENTROPY_AVAILABLE = True
+except ImportError as e:
+    print(f"[Memory] ⚠️ Entropy system not available: {e}")
+    ENTROPY_AVAILABLE = False
 
 # Enhanced settings with fallbacks
 try:
@@ -389,41 +398,168 @@ class UserMemorySystem:
         return contexts
     
     def get_contextual_memory_for_response(self) -> str:
-        """🧠 Get memory context optimized for appropriate responses"""
+        """🧠 Get memory context optimized for appropriate responses + PROBABILISTIC RETRIEVAL"""
         context_parts = []
         
-        # Recent personal facts with entity awareness
-        recent_facts = list(self.personal_facts.values())[-4:]
-        for fact in recent_facts:
-            if fact.current_status == EntityStatus.CURRENT:
-                context_parts.append(f"{fact.key.replace('_', ' ')}: {fact.value}")
-            else:
-                context_parts.append(f"Former {fact.key.replace('_', ' ')}: {fact.value} (Status: {fact.current_status.value})")
+        # ✅ ENTROPY SYSTEM: Probabilistic memory retrieval instead of always best match
+        if ENTROPY_AVAILABLE:
+            entropy_engine = get_entropy_engine()
+            uncertainty_state = entropy_engine.get_uncertainty_state()
+            print(f"[Memory] 🌀 Probabilistic memory retrieval - uncertainty: {uncertainty_state.value}")
         
-        # Critical entity statuses
-        critical_entities = [entity for entity in self.entity_memories.values() 
-                           if entity.emotional_significance > 0.7]
+        # Recent personal facts with entity awareness + PROBABILISTIC SELECTION
+        all_facts = list(self.personal_facts.values())
+        if ENTROPY_AVAILABLE and len(all_facts) > 4:
+            # Don't always pick the most recent - inject uncertainty
+            fact_weights = []
+            for i, fact in enumerate(all_facts):
+                # More recent facts get higher weight, but with entropy
+                recency_weight = (i + 1) / len(all_facts)
+                emotional_weight = getattr(fact, 'emotional_significance', 0.5)
+                uncertainty_factor = inject_consciousness_entropy("memory", 1.0, EntropyLevel.LOW)
+                final_weight = (recency_weight + emotional_weight) * uncertainty_factor
+                fact_weights.append(final_weight)
+            
+            # Probabilistic selection of facts
+            selected_facts = []
+            for _ in range(min(4, len(all_facts))):
+                if all_facts:
+                    selected_fact = probabilistic_select(all_facts, fact_weights)
+                    if selected_fact and selected_fact not in selected_facts:
+                        selected_facts.append(selected_fact)
+                        # Remove from lists to avoid duplicates
+                        fact_index = all_facts.index(selected_fact)
+                        all_facts.pop(fact_index)
+                        fact_weights.pop(fact_index)
+            recent_facts = selected_facts
+        else:
+            recent_facts = all_facts[-4:]
+        
+        for fact in recent_facts:
+            # ✅ ENTROPY SYSTEM: Memory "drift" - occasionally misremember details
+            fact_text = f"{fact.key.replace('_', ' ')}: {fact.value}"
+            if ENTROPY_AVAILABLE and entropy_engine.random_state.random() < 0.1:  # 10% chance of drift
+                # Inject slight uncertainty into memory recall
+                uncertainty_markers = ["I think ", "I believe ", "if I remember correctly, "]
+                marker = probabilistic_select(uncertainty_markers + [""])
+                if marker:
+                    fact_text = marker + fact_text.lower()
+            
+            if fact.current_status == EntityStatus.CURRENT:
+                context_parts.append(fact_text)
+            else:
+                context_parts.append(f"Former {fact_text} (Status: {fact.current_status.value})")
+        
+        # Critical entity statuses with UNCERTAIN RECALL
+        all_entities = list(self.entity_memories.values())
+        critical_entities = [entity for entity in all_entities if entity.emotional_significance > 0.7]
+        
+        if ENTROPY_AVAILABLE and critical_entities:
+            # Sometimes forget to mention all critical entities (memory imperfection)
+            mention_probability = 0.8  # 80% chance to mention each entity
+            entities_to_mention = []
+            for entity in critical_entities:
+                if entropy_engine.random_state.random() < mention_probability:
+                    entities_to_mention.append(entity)
+            critical_entities = entities_to_mention
+        
         for entity in critical_entities:
             status_desc = f"{entity.name} ({entity.entity_type}): {entity.status.value}"
             if entity.status == EntityStatus.DECEASED:
                 status_desc += " - Handle with sensitivity"
+            
+            # ✅ ENTROPY SYSTEM: Occasional false memory associations
+            if ENTROPY_AVAILABLE and entropy_engine.random_state.random() < 0.05:  # 5% chance
+                status_desc += " (uncertain about details)"
+            
             context_parts.append(status_desc)
         
-        # Recent emotional states with entity connections
+        # Recent emotional states with entity connections + UNCERTAIN RECALL
         if self.emotional_history:
-            recent_emotion = self.emotional_history[-1]
+            if ENTROPY_AVAILABLE:
+                # Don't always recall the most recent emotion - sometimes confusion
+                emotion_weights = []
+                for i, emotion in enumerate(self.emotional_history):
+                    recency_weight = (i + 1) / len(self.emotional_history)
+                    emotional_intensity = getattr(emotion, 'intensity', 0.5)
+                    entropy_factor = inject_consciousness_entropy("memory", 1.0, EntropyLevel.LOW)
+                    emotion_weights.append((recency_weight + emotional_intensity) * entropy_factor)
+                
+                recent_emotion = probabilistic_select(self.emotional_history, emotion_weights)
+            else:
+                recent_emotion = self.emotional_history[-1]
+            
             emotion_context = f"Recent emotion: {recent_emotion.emotion} - {recent_emotion.context}"
             if recent_emotion.trigger_entities:
                 emotion_context += f" (Related to: {', '.join(recent_emotion.trigger_entities)})"
+            
+            # ✅ ENTROPY SYSTEM: Uncertainty about emotional memories
+            if ENTROPY_AVAILABLE and entropy_engine.get_uncertainty_state().value == "uncertain":
+                emotion_context = "I'm not entirely sure, but " + emotion_context.lower()
+            
             context_parts.append(emotion_context)
         
-        # Active life events with ongoing effects
-        recent_events = list(self.life_events.values())[-3:]
+        # Active life events with ongoing effects + MEMORY DRIFT
+        all_events = list(self.life_events.values())
+        if ENTROPY_AVAILABLE and len(all_events) > 3:
+            # Probabilistic event selection with emphasis on emotional impact
+            event_weights = []
+            for event in all_events:
+                impact_weight = event.emotional_impact
+                recency_weight = 0.5  # Less emphasis on recency for major events
+                uncertainty_factor = inject_consciousness_entropy("memory", 1.0, EntropyLevel.LOW)
+                event_weights.append((impact_weight + recency_weight) * uncertainty_factor)
+            
+            selected_events = []
+            remaining_events = all_events.copy()
+            remaining_weights = event_weights.copy()
+            
+            for _ in range(min(3, len(all_events))):
+                if remaining_events:
+                    selected_event = probabilistic_select(remaining_events, remaining_weights)
+                    if selected_event:
+                        selected_events.append(selected_event)
+                        event_index = remaining_events.index(selected_event)
+                        remaining_events.pop(event_index)
+                        remaining_weights.pop(event_index)
+            recent_events = selected_events
+        else:
+            recent_events = all_events[-3:]
+        
         for event in recent_events:
             if event.ongoing_effects:
-                context_parts.append(f"Recent event: {event.description} - Ongoing: {', '.join(event.ongoing_effects)}")
+                event_desc = f"Recent event: {event.description} - Ongoing: {', '.join(event.ongoing_effects)}"
+                
+                # ✅ ENTROPY SYSTEM: Occasional confusion about event timeline
+                if ENTROPY_AVAILABLE and entropy_engine.random_state.random() < 0.08:  # 8% chance
+                    timeline_confusion = ["I think it was recent", "sometime ago", "not sure when exactly"]
+                    confusion = probabilistic_select(timeline_confusion)
+                    event_desc = event_desc.replace("Recent event:", f"Event ({confusion}):")
+                
+                context_parts.append(event_desc)
         
-        return "\n".join(context_parts) if context_parts else ""
+        # ✅ ENTROPY SYSTEM: Random memory association (false memories)
+        if ENTROPY_AVAILABLE and entropy_engine.random_state.random() < 0.03:  # 3% chance
+            false_memory_fragments = [
+                "Something about music preferences",
+                "Mentioned something about travel",
+                "Had thoughts about food or restaurants",
+                "Discussed weather or seasons",
+                "Talked about work or daily routine"
+            ]
+            false_memory = probabilistic_select(false_memory_fragments)
+            context_parts.append(f"(Vague recollection: {false_memory})")
+            print(f"[Memory] 🌀 False memory association injected: {false_memory}")
+        
+        result = "\n".join(context_parts) if context_parts else ""
+        
+        # ✅ ENTROPY SYSTEM: Overall memory confidence uncertainty
+        if ENTROPY_AVAILABLE and result:
+            consciousness_score = entropy_engine.get_consciousness_metrics()['consciousness_score']
+            if consciousness_score > 0.6 and entropy_engine.random_state.random() < 0.1:  # High consciousness = more uncertainty
+                result = "Note: Memory recall has some uncertainty.\n" + result
+        
+        return result
     
     # Enhanced extraction methods with entity awareness
     def extract_memories_from_text(self, text: str):
