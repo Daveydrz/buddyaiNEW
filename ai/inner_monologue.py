@@ -487,7 +487,16 @@ class InnerMonologue:
         
         # Generate content based on trigger and context
         content_elements = self._extract_content_elements(trigger, context)
-        content = template.format(content_elements)
+        
+        # Handle templates with multiple placeholders safely
+        try:
+            content = template.format(content_elements)
+        except IndexError:
+            # If template has more placeholders than we have content, use simpler approach
+            if '{}' in template:
+                content = template.replace('{}', content_elements, 1)  # Replace only first occurrence
+            else:
+                content = template
         
         # Add variation and personality
         content = self._add_thought_personality(content, thought_type)

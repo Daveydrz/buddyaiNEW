@@ -552,8 +552,17 @@ class SelfModel:
     def _save_self_model(self):
         """Save self-model to persistent storage"""
         try:
+            # Convert identity components with proper datetime serialization
+            identity_data = {}
+            for k, v in self.identity_components.items():
+                component_dict = asdict(v)
+                # Convert datetime to ISO string
+                if 'last_updated' in component_dict:
+                    component_dict['last_updated'] = component_dict['last_updated'].isoformat()
+                identity_data[k] = component_dict
+            
             data = {
-                "identity_components": {k: asdict(v) for k, v in self.identity_components.items()},
+                "identity_components": identity_data,
                 "self_knowledge": {
                     "strengths": list(self.self_knowledge.strengths),
                     "weaknesses": list(self.self_knowledge.weaknesses),

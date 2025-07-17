@@ -1,0 +1,43 @@
+{
+  "recent_thoughts": [
+    {
+      "content": "The logic suggests that my experiences and growth",
+      "thought_type": "analytical",
+      "intensity": 0.6,
+      "timestamp": "2025-07-17T00:53:01.298169",
+      "triggered_by": "pondering interactions",
+      "emotional_tone": "neutral"
+    },
+    {
+      "content": "I notice that I tend to my experiences and growth",
+      "thought_type": "reflection",
+      "intensity": 0.6,
+      "timestamp": "2025-07-17T00:53:01.298682",
+      "triggered_by": "Testing inner consciousness",
+      "emotional_tone": "neutral"
+    }
+  ],
+  "mental_state": {
+    "mental_activity_level": 0.6,
+    "focus_level": 0.7,
+    "creativity_level": 0.5,
+    "contemplation_depth": 0.4
+  },
+  "metrics": {
+    "total_thoughts": 3,
+    "insights_generated": 0,
+    "thoughts_by_type": {
+      "reflection": 1,
+      "observation": 0,
+      "planning": 0,
+      "memory": 0,
+      "creative": 0,
+      "analytical": 2,
+      "emotional": 0,
+      "philosophical": 0,
+      "curiosity": 0,
+      "spontaneous": 0
+    }
+  },
+  "last_updated": "2025-07-17T00:53:07.300890"
+}

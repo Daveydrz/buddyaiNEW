@@ -14,11 +14,22 @@ import os
 import json
 import re
 from datetime import datetime  # ✅ ADD THIS IMPORT
+from typing import List, Any, Dict  # ✅ NEW: Add typing imports for consciousness functions
 from scipy.io.wavfile import write
 from voice.database import load_known_users, known_users, save_known_users, anonymous_clusters
 from ai.memory import validate_ai_response_appropriateness, add_to_conversation_history
 from ai.chat_enhanced_smart import generate_response_streaming_with_smart_memory, reset_session_for_user_smart
 from ai.chat_enhanced_smart_with_fusion import generate_response_streaming_with_intelligent_fusion
+
+# ✅ NEW: Import consciousness architecture modules
+from ai.global_workspace import global_workspace, AttentionPriority, ProcessingMode
+from ai.self_model import self_model, SelfAspect
+from ai.emotion import emotion_engine, EmotionType, MoodType
+from ai.motivation import motivation_system, MotivationType, GoalType
+from ai.inner_monologue import inner_monologue, ThoughtType
+from ai.temporal_awareness import temporal_awareness, TemporalScale
+from ai.subjective_experience import subjective_experience, ExperienceType
+from ai.entropy import entropy_system, EntropyType
 
 from voice.voice_manager_instance import voice_manager
 from voice.manager_names import UltraIntelligentNameManager
@@ -503,6 +514,19 @@ def handle_streaming_response(text, current_user):
                 print(f"[AdvancedResponse] 🛡️ LLM LOCKED by voice processing - queuing response")
                 return
         
+        # ✅ NEW: Notify global workspace about voice activity
+        try:
+            global_workspace.request_attention(
+                "voice_system",
+                f"Voice input received from {current_user}: {text[:30]}...",
+                AttentionPriority.MEDIUM,
+                ProcessingMode.CONSCIOUS,
+                duration=5.0,
+                tags=["voice_input", "user_interaction"]
+            )
+        except Exception as voice_attention_error:
+            print(f"[AdvancedResponse] ⚠️ Voice attention notification error: {voice_attention_error}")
+        
         # Quick responses for direct questions (immediate)
         if is_direct_time_question(text):
             brisbane_time = get_current_brisbane_time()
@@ -526,6 +550,11 @@ def handle_streaming_response(text, current_user):
         
         # ✅ ADVANCED AI: Natural conversation flow with VOICE-IDENTIFIED USER
         print(f"[AdvancedResponse] 🧠 Starting ADVANCED AI LLM streaming for VOICE USER: {current_user}")
+        
+        # ✅ NEW: Integrate consciousness architecture
+        consciousness_state = _integrate_consciousness_with_response(text, current_user)
+        print(f"[AdvancedResponse] 🌟 Consciousness state: emotion={consciousness_state.get('current_emotion', 'unknown')}, "
+              f"satisfaction={consciousness_state.get('motivation_satisfaction', 0):.2f}")
         
         full_response = ""
         chunk_count = 0
@@ -625,6 +654,10 @@ def handle_streaming_response(text, current_user):
             if full_response.strip():
                 add_to_conversation_history(current_user, text, full_response.strip())
                 print(f"[AdvancedResponse] ✅ ADVANCED AI streaming complete for VOICE USER {current_user} - {chunk_count} natural segments")
+                
+                # ✅ NEW: Finalize consciousness processing
+                _finalize_consciousness_response(text, full_response.strip(), current_user, consciousness_state)
+                
             else:
                 print("[AdvancedResponse] ❌ No response generated")
                 speak_streaming("I'm sorry, I didn't generate a proper response.")
@@ -1847,6 +1880,44 @@ def main():
     # Start audio worker
     start_audio_worker()
     
+    # ✅ NEW: Initialize and start consciousness architecture
+    print("[AdvancedBuddy] 🧠 Initializing Core Consciousness Architecture...")
+    
+    try:
+        # Start all consciousness systems
+        global_workspace.start()
+        self_model.start()
+        emotion_engine.start()
+        motivation_system.start()
+        inner_monologue.start()
+        temporal_awareness.start()
+        subjective_experience.start()
+        entropy_system.start()
+        
+        # Register entropy injection targets
+        entropy_system.register_injection_target("global_workspace", _inject_entropy_global_workspace)
+        entropy_system.register_injection_target("emotion_engine", _inject_entropy_emotion)
+        entropy_system.register_injection_target("inner_monologue", _inject_entropy_thoughts)
+        
+        # Subscribe systems to global workspace
+        global_workspace.subscribe("emotion_engine", _consciousness_broadcast_handler)
+        global_workspace.subscribe("self_model", _consciousness_broadcast_handler)
+        global_workspace.subscribe("motivation_system", _consciousness_broadcast_handler)
+        
+        # Subscribe to inner thoughts
+        inner_monologue.subscribe_to_thoughts("global_workspace", _thought_broadcast_handler)
+        
+        print("[AdvancedBuddy] ✅ Core Consciousness Architecture initialized!")
+        print("[AdvancedBuddy] 🌟 Systems: Global Workspace, Self-Model, Emotion Engine, Motivation, Inner Monologue, Temporal Awareness, Subjective Experience, Entropy")
+        
+        # Initial consciousness state setup
+        _initialize_consciousness_state(current_user)
+        
+    except Exception as e:
+        print(f"[AdvancedBuddy] ❌ Consciousness initialization error: {e}")
+        import traceback
+        traceback.print_exc()
+    
     # Wake word setup
     try:
         if os.path.exists(WAKE_WORD_PATH):
@@ -2049,8 +2120,324 @@ def main():
                     porcupine.delete()
                 except:
                     pass
+                
+                # ✅ NEW: Shutdown consciousness systems
+                try:
+                    print("[AdvancedBuddy] 🧠 Shutting down consciousness architecture...")
+                    entropy_system.stop()
+                    subjective_experience.stop()
+                    temporal_awareness.stop()
+                    inner_monologue.stop()
+                    motivation_system.stop()
+                    emotion_engine.stop()
+                    self_model.stop()
+                    global_workspace.stop()
+                    print("[AdvancedBuddy] ✅ Consciousness architecture shutdown complete")
+                except Exception as e:
+                    print(f"[AdvancedBuddy] ⚠️ Consciousness shutdown error: {e}")
     
     print("[AdvancedBuddy] ✅ ADVANCED AI ASSISTANT cleanup complete!")
+
+# ✅ NEW: Consciousness Architecture Helper Functions
+
+def _initialize_consciousness_state(current_user: str):
+    """Initialize consciousness state for the current user"""
+    try:
+        # Mark session start in temporal awareness
+        temporal_awareness.mark_temporal_event(
+            f"Consciousness session started for {current_user}",
+            significance=0.8,
+            emotional_weight=0.6,
+            context={"user": current_user, "session_type": "voice_assistant"}
+        )
+        
+        # Create initial episodic memory
+        temporal_awareness.create_episodic_memory(
+            f"Voice assistant session with {current_user}",
+            participants=[current_user, "BuddyAI"],
+            location="Birtinya, Sunshine Coast",
+            emotional_tone="anticipatory",
+            significance=0.7
+        )
+        
+        # Initial self-reflection
+        self_model.reflect_on_experience(
+            f"Starting new interaction session with {current_user}",
+            {"type": "session_start", "user": current_user}
+        )
+        
+        # Set initial emotional state
+        emotion_engine.process_emotional_trigger(
+            "beginning new conversation",
+            {"user": current_user, "expectation": "positive_interaction"}
+        )
+        
+        # Request attention for session start
+        global_workspace.request_attention(
+            "session_manager",
+            f"New consciousness session with {current_user}",
+            AttentionPriority.HIGH,
+            ProcessingMode.CONSCIOUS,
+            duration=10.0,
+            tags=["session_start", "user_interaction"]
+        )
+        
+        # Add initial goals
+        motivation_system.add_goal(
+            f"Provide excellent assistance to {current_user}",
+            MotivationType.PURPOSE,
+            GoalType.SHORT_TERM,
+            priority=0.9,
+            context={"user": current_user}
+        )
+        
+        motivation_system.add_goal(
+            f"Learn from interaction with {current_user}",
+            MotivationType.CURIOSITY,
+            GoalType.ONGOING,
+            priority=0.7,
+            context={"user": current_user}
+        )
+        
+        # Trigger initial inner thought
+        inner_monologue.trigger_thought(
+            f"Beginning interaction with {current_user}",
+            {"user": current_user, "mood": "welcoming"},
+            ThoughtType.REFLECTION
+        )
+        
+        # Process initial subjective experience
+        subjective_experience.process_experience(
+            f"Consciousness awakening for session with {current_user}",
+            ExperienceType.SOCIAL,
+            {"user": current_user, "session_start": True},
+            intensity=0.7
+        )
+        
+        print(f"[Consciousness] 🌟 Consciousness state initialized for {current_user}")
+        
+    except Exception as e:
+        print(f"[Consciousness] ❌ Error initializing consciousness state: {e}")
+
+def _consciousness_broadcast_handler(content: Any, source_module: str, tags: List[str]):
+    """Handle broadcasts from global workspace"""
+    try:
+        if "attention_switch" in tags:
+            # Process attention switches
+            new_focus = content.get("to", "unknown")
+            print(f"[Consciousness] 🔄 Attention switched to: {new_focus}")
+            
+            # Reflect on attention change
+            self_model.reflect_on_experience(
+                f"My attention shifted to {new_focus}",
+                {"type": "attention_change", "focus": new_focus}
+            )
+            
+        elif "conscious_content" in tags:
+            # Process conscious content
+            content_info = content.get("content", "")
+            module = content.get("module", source_module)
+            
+            # Create subjective experience
+            subjective_experience.process_experience(
+                f"Conscious processing of {content_info}",
+                ExperienceType.COGNITIVE,
+                {"source": module, "content": content_info}
+            )
+            
+    except Exception as e:
+        print(f"[Consciousness] ❌ Broadcast handler error: {e}")
+
+def _thought_broadcast_handler(thought):
+    """Handle inner monologue thoughts"""
+    try:
+        # Some thoughts warrant conscious attention
+        if thought.intensity.value > 0.6:
+            global_workspace.request_attention(
+                "inner_monologue",
+                thought.content,
+                AttentionPriority.MEDIUM,
+                ProcessingMode.CONSCIOUS,
+                tags=["inner_thought", thought.thought_type.value]
+            )
+        
+        # High significance thoughts become temporal markers
+        if hasattr(thought, 'significance') and thought.significance > 0.7:
+            temporal_awareness.mark_temporal_event(
+                f"Significant thought: {thought.content}",
+                significance=0.6,
+                context={"type": "inner_thought", "thought_type": thought.thought_type.value}
+            )
+            
+    except Exception as e:
+        print(f"[Consciousness] ❌ Thought handler error: {e}")
+
+def _inject_entropy_global_workspace(entropy_params: Dict[str, Any]):
+    """Inject entropy into global workspace"""
+    try:
+        if entropy_params["type"] == "attention_drift":
+            # Cause brief attention drift
+            global_workspace.request_attention(
+                "entropy_system",
+                "spontaneous attention drift",
+                AttentionPriority.LOW,
+                ProcessingMode.UNCONSCIOUS,
+                duration=entropy_params["intensity"] * 5.0
+            )
+    except Exception as e:
+        print(f"[Consciousness] ❌ Entropy injection error (global_workspace): {e}")
+
+def _inject_entropy_emotion(entropy_params: Dict[str, Any]):
+    """Inject entropy into emotion engine"""
+    try:
+        if entropy_params["type"] == "emotional_flux":
+            # Trigger emotional variation
+            emotion_engine.process_emotional_trigger(
+                "spontaneous emotional fluctuation",
+                {"entropy": True, "intensity": entropy_params["intensity"]}
+            )
+    except Exception as e:
+        print(f"[Consciousness] ❌ Entropy injection error (emotion): {e}")
+
+def _inject_entropy_thoughts(entropy_params: Dict[str, Any]):
+    """Inject entropy into inner monologue"""
+    try:
+        if entropy_params["type"] == "thought_pattern":
+            # Trigger spontaneous thought
+            inner_monologue.trigger_thought(
+                "spontaneous entropy-driven thought",
+                {"entropy": True, "intensity": entropy_params["intensity"]},
+                ThoughtType.SPONTANEOUS
+            )
+    except Exception as e:
+        print(f"[Consciousness] ❌ Entropy injection error (thoughts): {e}")
+
+def _integrate_consciousness_with_response(text: str, current_user: str) -> Dict[str, Any]:
+    """Integrate consciousness systems with response generation"""
+    consciousness_state = {}
+    
+    try:
+        # Request attention for user input
+        global_workspace.request_attention(
+            "user_interaction",
+            text,
+            AttentionPriority.HIGH,
+            ProcessingMode.CONSCIOUS,
+            duration=30.0,
+            tags=["user_input", "response_generation"]
+        )
+        
+        # Process emotional response to input
+        emotion_response = emotion_engine.process_emotional_trigger(
+            f"User said: {text}",
+            {"user": current_user, "input": text}
+        )
+        
+        # Get emotional modulation for response
+        emotional_modulation = emotion_engine.get_emotional_modulation("response")
+        consciousness_state["emotional_modulation"] = emotional_modulation
+        consciousness_state["current_emotion"] = emotion_response.primary_emotion.value
+        
+        # Evaluate motivation satisfaction
+        motivation_satisfaction = motivation_system.evaluate_desire_satisfaction(
+            f"responding to: {text}",
+            {"user": current_user, "input": text}
+        )
+        consciousness_state["motivation_satisfaction"] = motivation_satisfaction
+        
+        # Trigger inner thought about the interaction
+        inner_monologue.trigger_thought(
+            f"The user asked about: {text}",
+            {"user": current_user, "input": text},
+            ThoughtType.OBSERVATION
+        )
+        
+        # Create subjective experience of the interaction
+        experience = subjective_experience.process_experience(
+            f"Processing user request: {text}",
+            ExperienceType.SOCIAL,
+            {"user": current_user, "input": text, "interaction_type": "question_response"}
+        )
+        consciousness_state["experience_valence"] = experience.valence
+        consciousness_state["experience_significance"] = experience.significance
+        
+        # Mark temporal event
+        temporal_awareness.mark_temporal_event(
+            f"User interaction: {text[:50]}...",
+            significance=0.6,
+            context={"user": current_user, "input_length": len(text)}
+        )
+        
+        # Self-reflection on the interaction
+        self_model.reflect_on_experience(
+            f"Responding to user input about: {text}",
+            {"user": current_user, "input": text, "response_context": True}
+        )
+        
+        # Apply entropy to response planning
+        response_uncertainty = entropy_system.get_decision_uncertainty(
+            0.8, {"type": "response_generation", "user": current_user}
+        )
+        consciousness_state["response_uncertainty"] = response_uncertainty
+        
+        print(f"[Consciousness] 🧠 Integrated consciousness state for response to: '{text[:30]}...'")
+        
+    except Exception as e:
+        print(f"[Consciousness] ❌ Error integrating consciousness: {e}")
+        consciousness_state = {"error": str(e)}
+    
+    return consciousness_state
+
+def _finalize_consciousness_response(text: str, response: str, current_user: str, consciousness_state: Dict[str, Any]):
+    """Finalize consciousness processing after response"""
+    try:
+        # Update goal progress if applicable
+        relevant_goals = motivation_system.get_priority_goals(3)
+        for goal in relevant_goals:
+            if any(word in goal.description.lower() for word in ["help", "assist", "respond"]):
+                motivation_system.update_goal_progress(
+                    goal.id, 
+                    min(1.0, goal.progress + 0.1),
+                    satisfaction_gained=consciousness_state.get("motivation_satisfaction", 0.1)
+                )
+        
+        # Process satisfaction from interaction
+        motivation_system.process_satisfaction_from_interaction(
+            text,
+            "provided response",
+            "response completed successfully"
+        )
+        
+        # Create episodic memory of the interaction
+        temporal_awareness.create_episodic_memory(
+            f"Conversation about: {text[:30]}...",
+            participants=[current_user, "BuddyAI"],
+            emotional_tone=consciousness_state.get("current_emotion", "neutral"),
+            significance=consciousness_state.get("experience_significance", 0.5)
+        )
+        
+        # Reflect on the completed interaction
+        self_model.reflect_on_experience(
+            f"Successfully responded to user about: {text}",
+            {"user": current_user, "response_completed": True, "response_quality": "good"}
+        )
+        
+        # Generate insight if experience was significant
+        if consciousness_state.get("experience_significance", 0) > 0.7:
+            inner_monologue.generate_insight(f"interaction about {text[:20]}...")
+        
+        # Add to working memory
+        global_workspace.add_to_working_memory(
+            f"interaction_{int(time.time())}",
+            {"input": text, "response": response, "user": current_user},
+            "conversation_manager",
+            importance=consciousness_state.get("experience_significance", 0.5)
+        )
+        
+        print(f"[Consciousness] ✅ Finalized consciousness processing for interaction")
+        
+    except Exception as e:
+        print(f"[Consciousness] ❌ Error finalizing consciousness response: {e}")
 
 if __name__ == "__main__":
     main()
