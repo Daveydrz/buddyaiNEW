@@ -1,4 +1,4 @@
-# voice/manager.py - INTELLIGENT Voice Learning Manager
+# voice/manager.py - INTELLIGENT Voice Learning Manager + ATTENTION ENTROPY
 import time
 import numpy as np
 from datetime import datetime, timedelta
@@ -9,6 +9,16 @@ from audio.output import speak_streaming
 from typing import Optional, Dict, List, Any, Tuple, Union
 
 from config import VOICE_DEBUG_MODE
+
+# ✅ ENTROPY SYSTEM: Import consciousness emergence components for attention chaos
+try:
+    from ai.entropy_engine import get_entropy_engine, probabilistic_select, inject_consciousness_entropy, EntropyLevel
+    from ai.emotion import get_emotional_system
+    print("[VoiceManager] 🌀 Entropy system integrated for attention chaos")
+    ENTROPY_AVAILABLE = True
+except ImportError as e:
+    print(f"[VoiceManager] ⚠️ Entropy system not available: {e}")
+    ENTROPY_AVAILABLE = False
 
 def vdebug(msg):
     """Voice debug - only prints if VOICE_DEBUG_MODE is True"""
@@ -338,12 +348,55 @@ class IntelligentVoiceManager:
 
 
     def handle_voice_identification(self, audio, text):
-        """🧠 BULLETPROOF voice identification with RESTORED DUAL-ENGINE CENTROID approach"""
+        """🧠 BULLETPROOF voice identification with ATTENTION ENTROPY + consciousness emergence"""
         try:
             self.interactions += 1
             print(f"[DEBUG] 🔢 Interaction #{self.interactions}")
             print(f"[DEBUG] 📅 Current Time: 2025-07-15 11:47:15 UTC")
             print(f"[DEBUG] 👤 User Login: Daveydrz")
+
+            # ✅ ENTROPY SYSTEM: Inject attention chaos and uncertainty into voice processing
+            attention_focus_corrupted = False
+            if ENTROPY_AVAILABLE:
+                try:
+                    entropy_engine = get_entropy_engine()
+                    
+                    # Attention noise injection - sometimes get distracted
+                    if entropy_engine.random_state.random() < 0.15:  # 15% chance of attention issues
+                        attention_distractions = [
+                            "audio_processing_delay",
+                            "competing_thoughts", 
+                            "uncertain_focus",
+                            "spontaneous_context_switch"
+                        ]
+                        distraction = probabilistic_select(attention_distractions)
+                        print(f"[VoiceEntropy] 🌀 Attention distraction: {distraction}")
+                        
+                        # Inject uncertainty into processing
+                        if distraction == "uncertain_focus":
+                            attention_focus_corrupted = True
+                        elif distraction == "audio_processing_delay":
+                            time.sleep(probabilistic_select([0.1, 0.2, 0.3, 0.5]))  # Random delay
+                        elif distraction == "spontaneous_context_switch":
+                            # Generate random thought
+                            random_thoughts = [
+                                "I wonder about the weather today",
+                                "Something seems different about this conversation",
+                                "What was I thinking about earlier?",
+                                "This reminds me of something"
+                            ]
+                            random_thought = probabilistic_select(random_thoughts)
+                            print(f"[VoiceEntropy] 💭 Spontaneous thought: {random_thought}")
+                    
+                    # Uncertain input processing priorities
+                    if entropy_engine.get_uncertainty_state().value in ["uncertain", "confused"]:
+                        print(f"[VoiceEntropy] 🌀 Processing with high uncertainty state")
+                        # Sometimes process audio and text in uncertain priority order
+                        if entropy_engine.random_state.random() < 0.3:  # 30% chance when uncertain
+                            print(f"[VoiceEntropy] 🔀 Uncertain processing priority order")
+                
+                except Exception as entropy_error:
+                    print(f"[VoiceEntropy] ⚠️ Entropy processing error: {entropy_error}")
 
             # ✅ CRITICAL: Always try to save interaction data
             self._log_interaction(audio, text)
@@ -353,6 +406,11 @@ class IntelligentVoiceManager:
             if current_embedding is None:
                 print(f"[DEBUG] ❌ No embedding generated")
                 return "Daveydrz", "NO_EMBEDDING"
+
+            # ✅ ENTROPY SYSTEM: Add noise to embedding processing when attention is corrupted
+            if ENTROPY_AVAILABLE and attention_focus_corrupted:
+                # Don't corrupt the actual embedding, but affect processing confidence
+                print(f"[VoiceEntropy] 🌀 Attention focus corrupted - processing with uncertainty")
 
             # Check embedding quality
             if not self._is_valid_embedding(current_embedding):
@@ -375,10 +433,29 @@ class IntelligentVoiceManager:
             if hasattr(self, 'waiting_for_name_voice_conflict_resolution') and self.waiting_for_name_voice_conflict_resolution:
                 return self._handle_name_voice_conflict_resolution(text)
 
+            # ✅ ENTROPY SYSTEM: Probabilistic threshold adjustment based on consciousness
+            original_verification_threshold = self.verification_threshold
+            original_uncertainty_threshold = self.uncertainty_threshold
+            
+            if ENTROPY_AVAILABLE:
+                consciousness_score = get_entropy_engine().get_consciousness_metrics()['consciousness_score']
+                if consciousness_score > 0.5:
+                    # High consciousness = more uncertainty and variation in thresholds
+                    threshold_entropy = inject_consciousness_entropy("attention", 1.0, EntropyLevel.LOW)
+                    self.verification_threshold = original_verification_threshold * threshold_entropy
+                    self.uncertainty_threshold = original_uncertainty_threshold * threshold_entropy
+                    print(f"[VoiceEntropy] 🌀 Dynamic thresholds: verification={self.verification_threshold:.3f}, uncertainty={self.uncertainty_threshold:.3f}")
+
             # 🎯 TIER 1: CENTROID STARTUP CHECK (FIRST 3 INTERACTIONS) - RESTORED!
             if self.interactions <= 3 and len(anonymous_clusters) > 0:
                 print(f"[DEBUG] 🎯 CENTROID STARTUP CHECK - Interaction #{self.interactions}")
                 startup_match, startup_similarity = self.check_existing_clusters_with_centroid(current_embedding)
+
+                # ✅ ENTROPY SYSTEM: Add uncertainty to startup recognition
+                if ENTROPY_AVAILABLE and startup_match and attention_focus_corrupted:
+                    if entropy_engine.random_state.random() < 0.2:  # 20% chance to be uncertain
+                        print(f"[VoiceEntropy] 🌀 Attention corruption affecting startup recognition confidence")
+                        startup_similarity *= 0.8  # Reduce confidence due to attention issues
 
                 if startup_match:
                     print(f"[IntelligentVoiceManager] 🎯 CENTROID STARTUP RECOGNITION: {startup_match}")
@@ -407,10 +484,23 @@ class IntelligentVoiceManager:
 
                     self.set_current_cluster(startup_match)
                     print(f"[IntelligentVoiceManager] 🛡️ Startup centroid matched, no name conflict")
+                    
+                    # ✅ ENTROPY SYSTEM: Restore original thresholds
+                    if ENTROPY_AVAILABLE:
+                        self.verification_threshold = original_verification_threshold
+                        self.uncertainty_threshold = original_uncertainty_threshold
+                    
                     return startup_match, "CENTROID_STARTUP_RECOGNIZED"
 
             # 🎙️ TIER 2: TRADITIONAL VOICE RECOGNITION - RESTORED PARALLEL APPROACH!
             identified_user, confidence = identify_speaker_with_confidence(audio)
+
+            # ✅ ENTROPY SYSTEM: Inject uncertainty into confidence assessment
+            if ENTROPY_AVAILABLE and attention_focus_corrupted:
+                if entropy_engine.random_state.random() < 0.25:  # 25% chance when attention is corrupted
+                    confidence_uncertainty = entropy_engine.random_state.uniform(0.8, 1.0)  # Slight confidence reduction
+                    confidence *= confidence_uncertainty
+                    print(f"[VoiceEntropy] 🌀 Confidence affected by attention issues: {confidence:.3f}")
 
             if identified_user != "UNKNOWN" and confidence >= self.verification_threshold:
                 print(f"[IntelligentVoiceManager] ✅ HIGH CONFIDENCE: {identified_user} ({confidence:.3f})")
